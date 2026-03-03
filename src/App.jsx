@@ -236,12 +236,12 @@ const AdvancedSoundEngine = () => {
 
   // ================= NATURE SOUND URLs =================
   const NATURE_SOUND_URLS = {
-    rain: '/sounds/rain2.wav',
+    rain: '/sounds/rain2.mp3',
     ocean: '/sounds/Calm Ocean Waves With Birds.mp3',
     fire: '/sounds/Campfire.wav',
     storm: '/sounds/Thunderstorm.mp3',
     wind: '/sounds/viento2.wav',
-    waterfall: '/sounds/waterfall2.wav',
+    waterfall: '/sounds/waterfall2.mp3',
     river: '/sounds/River in forest.mp3',
     nightforest: '/sounds/night-forest-with-insects-.wav',
     nightingale: '/sounds/Pure Sound Of The Nightingale Song In The Forest.mp3'
