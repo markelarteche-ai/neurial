@@ -1,0 +1,1817 @@
+import React, { useState, useRef, useEffect } from 'react';
+import { Play, Square, Download, Waves } from 'lucide-react';
+
+
+
+// ===================== EXPORT PROGRESS BAR =====================
+const ExportProgressBar = ({ exportProgress, formatTime, NT }) => {
+  const [localElapsed, setLocalElapsed] = React.useState(0);
+  const startedAtRef = React.useRef(null);
+  const intervalRef  = React.useRef(null);
+
+  React.useEffect(() => {
+    const isActive = exportProgress.stage !== '' && exportProgress.stage !== 'complete';
+    if (isActive) {
+      if (!startedAtRef.current) {
+        startedAtRef.current = Date.now();
+        setLocalElapsed(0);
+      }
+      intervalRef.current = setInterval(() => {
+        setLocalElapsed(Math.floor((Date.now() - startedAtRef.current) / 1000));
+      }, 250);
+    } else {
+      clearInterval(intervalRef.current);
+      if (exportProgress.stage === '') {
+        startedAtRef.current = null;
+        setLocalElapsed(0);
+      }
+    }
+    return () => clearInterval(intervalRef.current);
+  }, [exportProgress.stage]);
+
+  const isComplete     = exportProgress.stage === 'complete';
+  const displayElapsed = isComplete && exportProgress.elapsedTime > 0
+    ? exportProgress.elapsedTime : localElapsed;
+
+  return (
+    <div className="mx-6 mb-6 rounded-2xl overflow-hidden border border-yellow-400/25 bg-slate-900/80 shadow-xl shadow-black/40">
+      <style>{`
+        @keyframes xp-sweep {
+          0%   { transform: translateX(-100%); }
+          100% { transform: translateX(400%); }
+        }
+        @keyframes xp-dot { 0%,100%{opacity:1} 50%{opacity:0.2} }
+        @keyframes xp-fill {
+          0%   { width: 0%; }
+          100% { width: 100%; }
+        }
+      `}</style>
+
+      {/* Top accent */}
+      <div className="h-0.5 w-full" style={{
+        background: isComplete
+          ? 'linear-gradient(90deg,#166534,#4ade80,#166534)'
+          : 'linear-gradient(90deg,#92400e,#facc15,#fef08a,#facc15,#92400e)',
+      }} />
+
+      <div className="p-5 space-y-4">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full flex-shrink-0" style={{
+              backgroundColor: isComplete ? '#4ade80' : '#facc15',
+              animation: isComplete ? 'none' : 'xp-dot 1.2s ease-in-out infinite',
+            }} />
+            <span className="text-yellow-200 font-semibold text-sm tracking-wide">
+              {exportProgress.stage === 'loading nature sounds' && '🌿 Loading nature sounds…'}
+              {exportProgress.stage === 'rendering'             && '🎵 Rendering audio…'}
+              {exportProgress.stage === 'complete'              && '✅ Export complete!'}
+              {!['loading nature sounds','rendering','complete'].includes(exportProgress.stage) && '⏳ Processing…'}
+            </span>
+          </div>
+          {isComplete && (
+            <span className="font-bold tabular-nums" style={{
+              fontSize: '1.75rem', lineHeight: 1, color: '#4ade80',
+            }} {...NT}>100%</span>
+          )}
+        </div>
+
+        {/* Bar */}
+        <div className="relative h-5 w-full rounded-full overflow-hidden bg-slate-800 border border-slate-700/60 shadow-inner">
+          {isComplete ? (
+            <div className="absolute inset-y-0 left-0 right-0 rounded-full" style={{
+              background: 'linear-gradient(90deg,#166534,#4ade80)',
+              boxShadow: '0 0 16px rgba(74,222,128,0.5)',
+            }} />
+          ) : (
+            <>
+              <div className="absolute inset-y-0 left-0 right-0 rounded-full" style={{
+                background: 'linear-gradient(90deg,#92400e,#d97706)',
+                opacity: 0.35,
+              }} />
+              <div className="absolute inset-y-0 rounded-full" style={{
+                width: '45%',
+                background: 'linear-gradient(90deg,transparent,#facc15,#fef08a,#facc15,transparent)',
+                animation: 'xp-sweep 1.6s ease-in-out infinite',
+                boxShadow: '0 0 12px rgba(250,204,21,0.6)',
+              }} />
+            </>
+          )}
+          {isComplete && (
+            <span className="absolute inset-0 flex items-center justify-center text-xs font-bold"
+              style={{ color: 'rgba(0,0,0,0.55)' }} {...NT}>100%</span>
+          )}
+        </div>
+
+        {/* Cards */}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="bg-slate-800/70 rounded-xl p-3 border border-slate-700/50 flex flex-col gap-1">
+            <span className="text-yellow-200/40 uppercase tracking-widest" style={{fontSize:'9px'}}>Chunk</span>
+            <span className="text-yellow-100 font-bold tabular-nums" style={{fontSize:'1.05rem',lineHeight:1.2}} {...NT}>
+              {exportProgress.currentChunk}
+              <span className="text-yellow-200/30 font-normal text-xs"> / {exportProgress.totalChunks}</span>
+            </span>
+          </div>
+          <div className="bg-slate-800/70 rounded-xl p-3 border border-slate-700/50 flex flex-col gap-1">
+            <span className="text-yellow-200/40 uppercase tracking-widest" style={{fontSize:'9px'}}>Elapsed</span>
+            <span className="text-yellow-100 font-bold tabular-nums" style={{fontSize:'1.05rem',lineHeight:1.2}} {...NT}>
+              {formatTime(displayElapsed)}
+            </span>
+          </div>
+        </div>
+
+        {!isComplete && (
+          <div className="flex items-center gap-2 rounded-lg px-3 py-2 border" style={{
+            background:'rgba(234,179,8,0.05)', borderColor:'rgba(234,179,8,0.18)',
+          }}>
+            <span style={{fontSize:'0.85rem'}}>⚠️</span>
+            <p className="text-yellow-200/55 text-xs">Keep this tab open until the export finishes</p>
+          </div>
+        )}
+      </div>
+
+      {/* Bottom accent */}
+      <div className="h-0.5 w-full opacity-50" style={{
+        background: isComplete
+          ? 'linear-gradient(90deg,#166534,#4ade80,#166534)'
+          : 'linear-gradient(90deg,#92400e,#facc15,#fef08a,#facc15,#92400e)',
+      }} />
+    </div>
+  );
+};
+
+const AdvancedSoundEngine = () => {
+
+  // ================= STATE =================
+  const [activeTab, setActiveTab] = useState('layers');
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [simpleMode, setSimpleMode] = useState(true);
+  const [simpleView, setSimpleView] = useState('main');
+  const [isTransitioning, setIsTransitioning] = useState(false);
+  const [activePreset, setActivePreset] = useState(null);
+
+  // ================= EXPORT PROGRESS STATE =================
+  const [exportProgress, setExportProgress] = useState({
+    isExporting: false,
+    currentChunk: 0,
+    totalChunks: 0,
+    percentage: 0,
+    elapsedTime: 0,
+    estimatedTimeLeft: 0,
+    stage: ''
+  });
+
+  const [notificationsEnabled, setNotificationsEnabled] = useState(
+    Notification.permission === 'granted'
+  );
+
+  const requestNotificationPermission = async () => {
+    if (Notification.permission === 'default') {
+      const permission = await Notification.requestPermission();
+      setNotificationsEnabled(permission === 'granted');
+    }
+  };
+
+  // ================= AUDIO REFS =================
+  const audioContextRef = useRef(null);
+  const isApplyingPresetRef = useRef(false);
+  const mixerNodeRef = useRef(null);
+  const gainNodeRef = useRef(null);
+  const filterNodesRef = useRef({});
+
+  // Nature sounds — buffer-based system
+  const natureAudioRefs    = useRef({});
+  const natureGainNodes    = useRef({});
+  const natureBufferCacheRef = useRef({});
+
+  // ================= DATA =================
+  const NT = { translate: 'no', className: 'notranslate' };
+
+  const [layers, setLayers] = useState({
+    white: { intensity: 0, bass: 50, volume: 100, texture: 50, brightness: 50 },
+    pink: { intensity: 0, bass: 50, volume: 100, texture: 50, brightness: 50 },
+    brown: { intensity: 60, bass: 50, volume: 100, texture: 50, brightness: 50 },
+    grey: { intensity: 0, bass: 50, volume: 100, texture: 50, brightness: 50 },
+    blue: { intensity: 0, bass: 50, volume: 100, texture: 50, brightness: 50 },
+    violet:{ intensity: 0, bass: 50, volume: 100, texture: 50, brightness: 50 },
+    black: { intensity: 0, bass: 50, volume: 100, texture: 50, brightness: 50 },
+    green: { intensity: 0, bass: 50, volume: 100, texture: 50, brightness: 50 }
+  });
+
+  const [brainwaves, setBrainwaves] = useState({
+    alpha: { enabled:false, carrier:200, beat:10, intensity:50 },
+    theta: { enabled:false, carrier:200, beat:6, intensity:50 },
+    delta: { enabled:false, carrier:200, beat:2, intensity:50 },
+    beta: { enabled:false, carrier:200, beat:20, intensity:50 },
+    gamma: { enabled:false, carrier:200, beat:40, intensity:50 }
+  });
+
+  const [processing, setProcessing] = useState({
+    bass:50, treble:55, mid:55, stereoWidth:120, pressure:50,
+    stereoDecorr:35, harmonicSat:0, spectralDrift:0,
+    temporalSmooth:0, layerInteract:0, microRandom:0
+  });
+
+  // ================= NATURE SOUNDS STATE =================
+  const [natureSounds, setNatureSounds] = useState({
+    rain: { enabled: false, volume: 70 },
+    storm: { enabled: false, volume: 70 },
+    ocean: { enabled: false, volume: 70 },
+    wind: { enabled: false, volume: 70 },
+    fire: { enabled: false, volume: 70 },
+    waterfall: { enabled: false, volume: 70 },
+    river: { enabled: false, volume: 70 },
+    nightforest: { enabled: false, volume: 70 },
+    nightingale: { enabled: false, volume: 70 }
+  });
+
+  // Keep a ref mirror of natureSounds so imperative code can read current values
+  const natureSoundsRef = useRef(natureSounds);
+  useEffect(() => { natureSoundsRef.current = natureSounds; }, [natureSounds]);
+
+  // Keep a ref mirror of isPlaying
+  const isPlayingRef = useRef(false);
+  useEffect(() => { isPlayingRef.current = isPlaying; }, [isPlaying]);
+
+  // ================= NATURE SOUND URLs =================
+  const NATURE_SOUND_URLS = {
+    rain: '/sounds/rain2.wav',
+    ocean: '/sounds/Calm Ocean Waves With Birds.mp3',
+    fire: '/sounds/Campfire.wav',
+    storm: '/sounds/Thunderstorm.mp3',
+    wind: '/sounds/viento2.wav',
+    waterfall: '/sounds/waterfall2.wav',
+    river: '/sounds/River in forest.mp3',
+    nightforest: '/sounds/night-forest-with-insects-.wav',
+    nightingale: '/sounds/Pure Sound Of The Nightingale Song In The Forest.mp3'
+  };
+
+  // ================= CROSSFADE CURVES =================
+  const XFADE_SAMPLES = 128;
+  const xfadeCurveOut = new Float32Array(XFADE_SAMPLES).map((_, i) =>
+    Math.cos((i / XFADE_SAMPLES) * Math.PI * 0.5)
+  );
+  const xfadeCurveIn = new Float32Array(XFADE_SAMPLES).map((_, i) =>
+    Math.sin((i / XFADE_SAMPLES) * Math.PI * 0.5)
+  );
+
+  // ================= REALTIME PARAM SYNC =================
+  const syncAllRealtimeParams = (ctx) => {
+    const node = mixerNodeRef.current;
+    if (!ctx || !node || ctx.state !== 'running') return;
+    const t = ctx.currentTime;
+
+    Object.entries(layers).forEach(([k, c]) => {
+      node.parameters.get(`${k}_intensity`)?.setTargetAtTime((c.intensity ?? 0) / 100, t, 0.02);
+      node.parameters.get(`${k}_volume`)?.setTargetAtTime((c.volume ?? 100) / 100, t, 0.02);
+      node.parameters.get(`${k}_bass`)?.setTargetAtTime((c.bass ?? 50) / 100, t, 0.02);
+      node.parameters.get(`${k}_texture`)?.setTargetAtTime((c.texture ?? 50) / 100, t, 0.02);
+    });
+
+    Object.entries(brainwaves).forEach(([k, c]) => {
+      node.parameters.get(`${k}_enabled`)?.setTargetAtTime(c.enabled ? 1 : 0, t, 0.02);
+      node.parameters.get(`${k}_carrier`)?.setTargetAtTime(c.carrier ?? 200, t, 0.02);
+      node.parameters.get(`${k}_beat`)?.setTargetAtTime(c.beat ?? 10, t, 0.02);
+      node.parameters.get(`${k}_intensity`)?.setTargetAtTime((c.intensity ?? 50) / 100, t, 0.02);
+    });
+
+    node.parameters.get('stereoDecorr')?.setTargetAtTime((processing.stereoDecorr ?? 0) / 100, t, 0.02);
+    node.parameters.get('stereoWidth')?.setTargetAtTime((processing.stereoWidth ?? 100) / 50, t, 0.02);
+    node.parameters.get('harmonicSat')?.setTargetAtTime((processing.harmonicSat ?? 0) / 100, t, 0.02);
+    node.parameters.get('spectralDrift')?.setTargetAtTime((processing.spectralDrift ?? 0) / 100, t, 0.02);
+    node.parameters.get('temporalSmooth')?.setTargetAtTime((processing.temporalSmooth ?? 0) / 100, t, 0.02);
+    node.parameters.get('layerInteract')?.setTargetAtTime((processing.layerInteract ?? 0) / 100, t, 0.02);
+    node.parameters.get('microRandom')?.setTargetAtTime((processing.microRandom ?? 0) / 100, t, 0.02);
+    node.parameters.get('treble')?.setTargetAtTime((processing.treble ?? 55) / 100, t, 0.02);
+    node.parameters.get('mid')?.setTargetAtTime((processing.mid ?? 55) / 100, t, 0.02);
+    node.parameters.get('pressure')?.setTargetAtTime((processing.pressure ?? 50) / 100, t, 0.02);
+    node.parameters.get('master')?.setTargetAtTime(1, t, 0.02);
+  };
+
+  const ensureStableChain = (ctx) => {
+    const f = filterNodesRef.current;
+    if (!f.inGain) f.inGain = ctx.createGain();
+    if (!f.lpf) {
+      f.lpf = ctx.createBiquadFilter();
+      f.lpf.type = 'lowpass';
+      f.lpf.frequency.value = 800;
+    }
+    if (!f.bass) {
+      f.bass = ctx.createBiquadFilter();
+      f.bass.type = 'lowshelf';
+      f.bass.frequency.value = 200;
+    }
+    if (!f._wired) {
+      f.inGain.connect(f.lpf);
+      f.lpf.connect(f.bass);
+      f.bass.connect(gainNodeRef.current);
+      f._wired = true;
+    }
+    return f;
+  };
+
+  // ================= REALTIME UPDATE =================
+  useEffect(() => {
+    if (!isPlaying) return;
+    const ctx = audioContextRef.current;
+    if (!ctx) return;
+    syncAllRealtimeParams(ctx);
+    const f = ensureStableChain(ctx);
+    const t = ctx.currentTime;
+    f.bass.gain.setTargetAtTime((processing.bass-50)/5, t, 0.02);
+  }, [layers, brainwaves, processing, isPlaying]);
+
+  // ================= NATURE VOLUME SYNC =================
+  useEffect(() => {
+    Object.entries(natureSounds).forEach(([soundKey, cfg]) => {
+      const masterGain = natureGainNodes.current[soundKey];
+      if (masterGain) {
+        masterGain.gain.setTargetAtTime(cfg.volume / 100, audioContextRef.current?.currentTime ?? 0, 0.02);
+      }
+    });
+  }, [
+    natureSounds.rain.volume, natureSounds.storm.volume, natureSounds.ocean.volume,
+    natureSounds.wind.volume, natureSounds.fire.volume, natureSounds.waterfall.volume,
+    natureSounds.river.volume, natureSounds.nightforest.volume, natureSounds.nightingale.volume
+  ]);
+
+  // ================= NATURE SOUND IMPERATIVE ENGINE =================
+
+  // In-flight promise cache — prevents double-fetch when same sound is toggled rapidly
+  const natureLoadingRef = useRef({});
+
+  const loadNatureBufferRealtime = async (ctx, soundKey) => {
+    const url = NATURE_SOUND_URLS[soundKey];
+    if (natureBufferCacheRef.current[soundKey]) {
+      return natureBufferCacheRef.current[soundKey];
+    }
+    // If already fetching this key, wait for the same promise
+    if (natureLoadingRef.current[soundKey]) {
+      return natureLoadingRef.current[soundKey];
+    }
+    const promise = (async () => {
+      const res = await fetch(url);
+      const arr = await res.arrayBuffer();
+      const buffer = await ctx.decodeAudioData(arr);
+      const trimStart = 0;
+      const trimEnd = buffer.duration;
+      const playDuration = trimEnd - trimStart;
+      const data = { buffer, trimStart, trimEnd, playDuration };
+      natureBufferCacheRef.current[soundKey] = data;
+      delete natureLoadingRef.current[soundKey];
+      return data;
+    })();
+    natureLoadingRef.current[soundKey] = promise;
+    return promise;
+  };
+
+  // Start a single nature sound imperatively (no React state dependency)
+  const startNatureSound = (soundKey, volume) => {
+    const ctx = audioContextRef.current;
+    if (!ctx || ctx.state === 'closed') return;
+    if (natureAudioRefs.current[soundKey]) return; // already running
+
+    // If context is suspended, resume it first then retry
+    if (ctx.state === 'suspended') {
+      ctx.resume().then(() => {
+        // Only retry if still enabled and not already started by another call
+        if (!natureAudioRefs.current[soundKey] && audioContextRef.current === ctx) {
+          startNatureSound(soundKey, natureSoundsRef.current[soundKey]?.volume ?? volume);
+        }
+      }).catch(err => console.error('ctx.resume failed:', err));
+      return;
+    }
+
+    const gain1      = ctx.createGain();
+    const gain2      = ctx.createGain();
+    const masterGain = ctx.createGain();
+    masterGain.gain.value = volume / 100;
+
+    const destination = gainNodeRef.current ?? ctx.destination;
+    gain1.connect(masterGain);
+    gain2.connect(masterGain);
+    masterGain.connect(destination);
+
+    gain1.gain.value = 1;
+    gain2.gain.value = 0;
+
+    const XFADE     = 5.0;
+    const LOOKAHEAD = 0.25;
+
+    const state = {
+      buffer: null, gain1, gain2, masterGain,
+      src1: null, src2: null,
+      currentPlayer: 1, timerId: null,
+      trimStart: 0, trimEnd: 0, playDuration: 0,
+      cancelled: false,
+      _killedByUser: false
+    };
+
+    natureAudioRefs.current[soundKey] = state;
+    natureGainNodes.current[soundKey] = masterGain;
+
+    const makeSource = (gainNode) => {
+      const src = ctx.createBufferSource();
+      src.buffer = state.buffer;
+      src.loop = false;
+      src.connect(gainNode);
+      return src;
+    };
+
+    const startPlayer = (which, when) => {
+      const gainNode = which === 1 ? state.gain1 : state.gain2;
+      const src = makeSource(gainNode);
+      if (which === 1) state.src1 = src;
+      else             state.src2 = src;
+      const safeWhen = Math.max(ctx.currentTime + 0.05, when);
+      if (state.cancelled) return src;
+      src.start(safeWhen, state.trimStart);
+      return src;
+    };
+
+    const scheduleNextCrossfade = (tLoopStart, activePlayer) => {
+      if (state.cancelled || !state.buffer) return;
+      const rawTX = tLoopStart + (state.playDuration - XFADE);
+      const tX    = Math.max(ctx.currentTime + 0.01, rawTX);
+      if (state.cancelled) return;
+      const nextPlayer  = activePlayer === 1 ? 2 : 1;
+      const currentGain = activePlayer === 1 ? state.gain1 : state.gain2;
+      const nextGain    = activePlayer === 1 ? state.gain2 : state.gain1;
+      const outgoingSrc = activePlayer === 1 ? state.src1  : state.src2;
+      startPlayer(nextPlayer, tX);
+      currentGain.gain.cancelScheduledValues(tX);
+      currentGain.gain.setValueAtTime(1, tX);
+      currentGain.gain.setValueCurveAtTime(xfadeCurveOut, tX, XFADE);
+      nextGain.gain.cancelScheduledValues(tX);
+      nextGain.gain.setValueAtTime(0, tX);
+      nextGain.gain.setValueCurveAtTime(xfadeCurveIn, tX, XFADE);
+      try { if (outgoingSrc) outgoingSrc.stop(tX + XFADE + 0.05); } catch (e) {}
+      state.currentPlayer = nextPlayer;
+      const msUntilNext = Math.max(50, (tX + state.playDuration - XFADE - LOOKAHEAD - ctx.currentTime) * 1000);
+      state.timerId = setTimeout(() => {
+        if (state.cancelled || !natureAudioRefs.current[soundKey]) return;
+        scheduleNextCrossfade(tX, nextPlayer);
+      }, msUntilNext);
+    };
+
+    loadNatureBufferRealtime(ctx, soundKey)
+      .then(({ buffer, trimStart, trimEnd, playDuration }) => {
+        if (state._killedByUser || state.cancelled || !natureAudioRefs.current[soundKey]) {
+          try { gain1.disconnect(); } catch (e) {}
+          try { gain2.disconnect(); } catch (e) {}
+          try { masterGain.disconnect(); } catch (e) {}
+          return;
+        }
+        // For very long files (>300s), use a virtual 120s segment to avoid
+        // Chrome silently failing setValueCurveAtTime scheduled >minutes ahead.
+        const MAX_SEGMENT = 120;
+        const effectiveDuration = playDuration > MAX_SEGMENT ? MAX_SEGMENT : playDuration;
+        // Pick a random start offset within the buffer so it doesn't always begin at 0
+        const maxOffset = Math.max(0, playDuration - effectiveDuration - XFADE);
+        const startOffset = maxOffset > 0 ? Math.random() * maxOffset : 0;
+
+        state.buffer       = buffer;
+        state.trimStart    = startOffset;
+        state.trimEnd      = startOffset + effectiveDuration;
+        state.playDuration = effectiveDuration;
+
+        const schedulePlay = () => {
+          gain1.gain.cancelScheduledValues(ctx.currentTime);
+          gain1.gain.setValueAtTime(1, ctx.currentTime);
+          gain2.gain.cancelScheduledValues(ctx.currentTime);
+          gain2.gain.setValueAtTime(0, ctx.currentTime);
+          const t0 = ctx.currentTime + 0.05;
+          startPlayer(1, t0);
+          scheduleNextCrossfade(t0, 1);
+        };
+        if (ctx.state === 'suspended') {
+          ctx.resume().then(schedulePlay).catch(err => console.error(`[nature] ${soundKey}: resume failed`, err));
+        } else {
+          schedulePlay();
+        }
+      })
+      .catch(err => {
+        delete natureAudioRefs.current[soundKey];
+        delete natureGainNodes.current[soundKey];
+        console.error(`[nature] ${soundKey}: load error`, err);
+      });
+  };
+
+  const stopNatureSoundImperative = (soundKey, immediate = false) => {
+    const st = natureAudioRefs.current[soundKey];
+    if (!st) return;
+    st.cancelled = true;
+    st._killedByUser = true;
+    if (st.timerId) clearTimeout(st.timerId);
+
+    const ctx = audioContextRef.current;
+    const now = ctx?.currentTime ?? 0;
+
+    if (immediate) {
+      try { st.src1?.stop(0); } catch {}
+      try { st.src2?.stop(0); } catch {}
+      try { st.gain1?.disconnect(); } catch {}
+      try { st.gain2?.disconnect(); } catch {}
+      try { st.masterGain?.disconnect(); } catch {}
+      delete natureAudioRefs.current[soundKey];
+      delete natureGainNodes.current[soundKey];
+    } else {
+      try { if (st.masterGain) st.masterGain.gain.setTargetAtTime(0, now, 0.1); } catch (e) {}
+      try { if (st.src1) st.src1.stop(now + 0.25); } catch (e) {}
+      try { if (st.src2) st.src2.stop(now + 0.25); } catch (e) {}
+      setTimeout(() => {
+        try { st.gain1?.disconnect(); } catch {}
+        try { st.gain2?.disconnect(); } catch {}
+        try { st.masterGain?.disconnect(); } catch {}
+        delete natureAudioRefs.current[soundKey];
+        delete natureGainNodes.current[soundKey];
+      }, 300);
+    }
+  };
+
+  const killAllNatureNow = () => {
+    Object.keys(natureAudioRefs.current).forEach((key) => {
+      const st = natureAudioRefs.current[key];
+      if (!st) return;
+      st._killedByUser = true;
+      st.cancelled = true;
+      if (st.timerId) clearTimeout(st.timerId);
+      try { st.src1?.stop(0); } catch {}
+      try { st.src2?.stop(0); } catch {}
+      try { st.gain1?.disconnect(); } catch {}
+      try { st.gain2?.disconnect(); } catch {}
+      try { st.masterGain?.disconnect(); } catch {}
+    });
+    natureAudioRefs.current = {};
+    natureGainNodes.current = {};
+  };
+
+  // Preload all nature buffers silently in background (no playback, just cache)
+  const preloadAllNatureBuffers = (ctx) => {
+    Object.keys(NATURE_SOUND_URLS).forEach(soundKey => {
+      if (!natureBufferCacheRef.current[soundKey] && !natureLoadingRef.current[soundKey]) {
+        loadNatureBufferRealtime(ctx, soundKey).catch(() => {});
+      }
+    });
+  };
+
+  // Start all currently-enabled nature sounds (called after audio context is ready)
+  const startAllEnabledNatureSounds = () => {
+    const sounds = natureSoundsRef.current;
+    Object.entries(sounds).forEach(([soundKey, cfg]) => {
+      if (cfg.enabled && !natureAudioRefs.current[soundKey]) {
+        startNatureSound(soundKey, cfg.volume);
+      }
+    });
+  };
+
+  // ================= NATURE CHECKBOX HANDLER =================
+  const handleNatureToggle = (soundKey, checked) => {
+    // Update React state
+    setNatureSounds(prev => ({ ...prev, [soundKey]: { ...prev[soundKey], enabled: checked } }));
+
+    if (checked) {
+      // Start if audio context exists (running or suspended — startNatureSound handles resume)
+      const ctx = audioContextRef.current;
+      if (ctx && ctx.state !== 'closed' && !natureAudioRefs.current[soundKey]) {
+        const currentVolume = natureSoundsRef.current[soundKey]?.volume ?? 70;
+        startNatureSound(soundKey, currentVolume);
+      }
+    } else {
+      // Stop with fade if running
+      if (natureAudioRefs.current[soundKey]) {
+        stopNatureSoundImperative(soundKey, false);
+      }
+    }
+  };
+
+  // ================= PLAY =================
+  const play = async () => {
+    if (isTransitioning) return;
+    if (isPlaying) return stopSound();
+
+    setIsTransitioning(true);
+    setIsGenerating(true);
+
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      await ctx.resume();
+
+      audioContextRef.current = ctx;
+
+      const masterGain = ctx.createGain();
+      masterGain.gain.value = 1;
+      gainNodeRef.current = masterGain;
+
+      await ctx.audioWorklet.addModule('/realtime-engine.worklet.js');
+
+      const engine = new AudioWorkletNode(ctx, 'realtime-engine', {
+        numberOfOutputs: 1,
+        outputChannelCount: [2]
+      });
+
+      mixerNodeRef.current = engine;
+
+      const f = ensureStableChain(ctx);
+
+      engine.connect(f.inGain);
+      masterGain.connect(ctx.destination);
+
+      syncAllRealtimeParams(ctx);
+
+      setIsPlaying(true);
+      isPlayingRef.current = true;
+
+      // Preload all nature buffers in background so they're instant when toggled
+      preloadAllNatureBuffers(ctx);
+
+      // Start all enabled nature sounds immediately after context is ready
+      startAllEnabledNatureSounds();
+
+    } catch (err) {
+      console.error('Play error:', err);
+    }
+
+    setIsGenerating(false);
+    setIsTransitioning(false);
+  };
+
+  // ================= STOP =================
+  const stopSound = () => {
+    const ctx = audioContextRef.current;
+    const gain = gainNodeRef.current;
+
+    if (!ctx || !gain) {
+      killAllNatureNow();
+      mixerNodeRef.current = null;
+      audioContextRef.current = null;
+      filterNodesRef.current = {};
+      setIsPlaying(false);
+      isPlayingRef.current = false;
+      setIsGenerating(false);
+      setIsTransitioning(false);
+      return;
+    }
+    if (!isPlaying) return;
+
+    setIsPlaying(false);
+    isPlayingRef.current = false;
+    setIsTransitioning(true);
+
+    const fadeTime = 0.1;
+    const now = ctx.currentTime;
+    try {
+      gain.gain.cancelScheduledValues(now);
+      gain.gain.setValueAtTime(gain.gain.value || 1, now);
+      gain.gain.linearRampToValueAtTime(0, now + fadeTime);
+    } catch (e) {}
+
+    // Kill all nature sounds immediately on stop
+    killAllNatureNow();
+
+    setTimeout(async () => {
+      try {
+        if (mixerNodeRef.current) mixerNodeRef.current.disconnect();
+        if (filterNodesRef.current.inGain) filterNodesRef.current.inGain.disconnect();
+        if (filterNodesRef.current.lpf) filterNodesRef.current.lpf.disconnect();
+        if (filterNodesRef.current.bass) filterNodesRef.current.bass.disconnect();
+        if (gain) gain.disconnect();
+      } catch {}
+
+      filterNodesRef.current = {};
+      mixerNodeRef.current = null;
+
+      if (ctx && ctx.state !== 'closed') {
+        await ctx.close();
+      }
+
+      audioContextRef.current = null;
+
+      setIsGenerating(false);
+      setIsTransitioning(false);
+    }, fadeTime * 1000 + 100);
+
+    setTimeout(() => {
+      setIsTransitioning(false);
+      setIsGenerating(false);
+    }, fadeTime * 1000 + 500);
+  };
+
+  // ================= EXPORT CONFIG =================
+  const [exportConfig, setExportConfig] = useState({
+    format: 'wav24_48',
+    duration: 60
+  });
+
+  const quickDurations = [
+    { label: '1 min', seconds: 60 },
+    { label: '5 min', seconds: 300 },
+    { label: '10 min', seconds: 600 },
+    { label: '30 min', seconds: 1800 },
+    { label: '1 hour', seconds: 3600 },
+    { label: '2 hours', seconds: 7200 },
+    { label: '4 hours', seconds: 14400 },
+    { label: '8 hours', seconds: 28800 }
+  ];
+
+  // ================= EXPORT TIME ESTIMATES =================
+const exportTimeEstimates = {
+  60:    { wav: '~15s',    mp3: '~30s' },
+  300:   { wav: '~45s',    mp3: '~2min' },
+  600:   { wav: '~1m30s',  mp3: '~3min' },
+  1800:  { wav: '~4min',   mp3: '~10min' },
+  3600:  { wav: '~9min',   mp3: '~20min' },
+  7200:  { wav: '~18min',  mp3: '~40min' },
+  14400: { wav: '~36min',  mp3: '~1h20m' },
+  28800: { wav: '~1h12m',  mp3: '~2h30m' },
+};
+
+const isWavFormat = (fmt) => fmt === 'wav24_44' || fmt === 'wav24_48';
+
+const getEstimateForDuration = (seconds, fmt) => {
+  const est = exportTimeEstimates[seconds];
+  if (!est) return null;
+  return isWavFormat(fmt) ? est.wav : est.mp3;
+};
+
+  // ================= SIMPLE MODE RULES =================
+  const SIMPLE_ALLOWED_LAYERS = ['white', 'pink', 'brown'];
+  const SIMPLE_ALLOWED_WAVES = ['alpha'];
+
+  const SIMPLE_PRESET_KEYS = ['DeepSleep', 'CalmMind', 'DeepFocus', 'ADHDSupport'];
+  const ADVANCED_PRESET_KEYS = ['DeepSleep', 'DeepSpace', 'CalmMind', 'MentalReset', 'DeepFocus', 'TinnitusMasking', 'ADHDSupport', 'MeditationFlow'];
+
+  const sanitizeLayersForSimple = (layersObj) => {
+    const out = { ...layersObj };
+    Object.keys(out).forEach((k) => {
+      if (!SIMPLE_ALLOWED_LAYERS.includes(k)) out[k] = { ...out[k], intensity: 0 };
+    });
+    return out;
+  };
+
+  const sanitizeBrainwavesForSimple = (wavesObj) => {
+    const out = { ...wavesObj };
+    const activeWave = Object.entries(out).find(([_, v]) => v?.enabled === true)?.[0];
+    Object.keys(out).forEach((k) => {
+      if (k !== activeWave) out[k] = { ...out[k], enabled: false };
+    });
+    return out;
+  };
+
+  // ================= WAV / MP3 EXPORT =================
+
+  const buildWavHeader = (totalFrames, sr) => {
+    const nc = 2, bps = 3, ba = nc * bps, br = sr * ba;
+    const dataSize = totalFrames * ba;
+    const buf = new ArrayBuffer(44);
+    const v = new DataView(buf);
+    let o = 0;
+    const ws = (s) => { for (let i = 0; i < s.length; i++) v.setUint8(o++, s.charCodeAt(i)); };
+    ws('RIFF'); v.setUint32(o, 36 + dataSize, true); o += 4;
+    ws('WAVE'); ws('fmt '); v.setUint32(o, 16, true); o += 4;
+    v.setUint16(o, 1, true); o += 2;
+    v.setUint16(o, nc, true); o += 2;
+    v.setUint32(o, sr, true); o += 4;
+    v.setUint32(o, br, true); o += 4;
+    v.setUint16(o, ba, true); o += 2;
+    v.setUint16(o, 24, true); o += 2;
+    ws('data'); v.setUint32(o, dataSize, true);
+    return new Uint8Array(buf);
+  };
+
+  const floatStereoToPCM24 = (left, right) => {
+    const frames = left.length;
+    const out = new Uint8Array(frames * 6);
+    for (let i = 0, o = 0; i < frames; i++, o += 6) {
+      let l = left[i] < -1 ? -1 : left[i] > 1 ? 1 : left[i];
+      let r = right[i] < -1 ? -1 : right[i] > 1 ? 1 : right[i];
+      let li = (l < 0 ? l * 8388608 : l * 8388607) | 0;
+      let ri = (r < 0 ? r * 8388608 : r * 8388607) | 0;
+      out[o]     =  li        & 0xFF;
+      out[o + 1] = (li >> 8)  & 0xFF;
+      out[o + 2] = (li >> 16) & 0xFF;
+      out[o + 3] =  ri        & 0xFF;
+      out[o + 4] = (ri >> 8)  & 0xFF;
+      out[o + 5] = (ri >> 16) & 0xFF;
+    }
+    return out;
+  };
+
+  const initMP3Worker = (sampleRate, kbps) => {
+    return new Promise((resolve, reject) => {
+      const worker = new Worker('/mp3-worker.js');
+      worker.onmessage = (e) => {
+        if (e.data.type === 'ready') resolve(worker);
+      };
+      worker.onerror = (err) => reject(err);
+      worker.postMessage({ type: 'init', data: { sampleRate, kbps } });
+    });
+  };
+
+  const encodeChunkWithWorker = (worker, left, right, id) => {
+    return new Promise((resolve) => {
+      const leftCopy = new Float32Array(left);
+      const rightCopy = new Float32Array(right);
+      const handler = (e) => {
+        if (e.data.type === 'encoded' && e.data.id === id) {
+          worker.removeEventListener('message', handler);
+          resolve(new Uint8Array(e.data.buffer));
+        }
+      };
+      worker.addEventListener('message', handler);
+      worker.postMessage(
+        { type: 'encode', data: { left: leftCopy.buffer, right: rightCopy.buffer, id } },
+        [leftCopy.buffer, rightCopy.buffer]
+      );
+    });
+  };
+
+  const flushMP3Worker = (worker) => {
+    return new Promise((resolve) => {
+      worker.onmessage = (e) => {
+        if (e.data.type === 'flushed') {
+          resolve(new Uint8Array(e.data.buffer));
+          worker.terminate();
+        }
+      };
+      worker.postMessage({ type: 'flush' });
+    });
+  };
+
+  const lamejsRef = useRef(null);
+  const mp3WorkerRef = useRef(null);
+
+  // ================= NATURE BUFFER LOADER (offline export only) =================
+  const loadNatureBuffer = async (url) => {
+    const res = await fetch(url);
+    const arr = await res.arrayBuffer();
+    const tmpCtx = new OfflineAudioContext(2, 1, 44100);
+    return await tmpCtx.decodeAudioData(arr);
+  };
+
+  const expSoundChunked = async (totalDuration, sampleRate, isMP3, formatType, formatDetail) => {
+    let chunkDuration;
+    if (isMP3) {
+      chunkDuration = 600;
+    } else {
+      if (totalDuration <= 3600) chunkDuration = 1200;
+      else if (totalDuration <= 7200) chunkDuration = 600;
+      else if (totalDuration <= 14400) chunkDuration = 480;
+      else chunkDuration = 300;
+    }
+
+    const numChunks = Math.ceil(totalDuration / chunkDuration);
+    const startTime = Date.now();
+
+    setExportProgress({ isExporting: true, currentChunk: 0, totalChunks: numChunks, percentage: 0, elapsedTime: 0, estimatedTimeLeft: 0, stage: 'rendering' });
+
+    let mp3Worker = null;
+    if (isMP3) {
+      const kbps = parseInt(formatDetail);
+      mp3Worker = await initMP3Worker(sampleRate, kbps);
+    }
+
+    const blobParts = [];
+    let totalFrames = 0;
+
+    const enabledNatureBuffers = {};
+    const enabledNatureEntries = Object.entries(natureSounds).filter(([, cfg]) => cfg.enabled);
+    if (enabledNatureEntries.length > 0) {
+      setExportProgress(prev => ({ ...prev, stage: 'loading nature sounds' }));
+      await Promise.all(
+        enabledNatureEntries.map(async ([soundKey, cfg]) => {
+          try {
+            const url = NATURE_SOUND_URLS[soundKey];
+            enabledNatureBuffers[soundKey] = { buffer: await loadNatureBuffer(url), volume: cfg.volume };
+          } catch (err) {
+            console.error(`Failed to load nature sound buffer for export: ${soundKey}`, err);
+          }
+        })
+      );
+      setExportProgress(prev => ({ ...prev, stage: 'rendering' }));
+    }
+
+    let pendingEncode = null; // { promise, id }
+
+    for (let chunkIndex = 0; chunkIndex < numChunks; chunkIndex++) {
+      const isLastChunk = chunkIndex === numChunks - 1;
+      const currentChunkDuration = isLastChunk ? totalDuration - (chunkIndex * chunkDuration) : chunkDuration;
+      const extraDiscard = chunkIndex === 0 ? 1.0 : 0;
+      const renderDuration = currentChunkDuration + extraDiscard;
+      const renderSamples = Math.floor(sampleRate * renderDuration);
+
+      const preElapsed = Math.floor((Date.now() - startTime) / 1000);
+      const preProgress = Math.floor((chunkIndex / numChunks) * 100);
+      const preAvg = chunkIndex > 0 ? preElapsed / chunkIndex : 0;
+      const preETA = preAvg > 0 ? Math.floor(preAvg * (numChunks - chunkIndex)) : 0;
+      setExportProgress(prev => ({ ...prev, currentChunk: chunkIndex, percentage: preProgress, elapsedTime: preElapsed, estimatedTimeLeft: preETA }));
+      await new Promise(resolve => setTimeout(resolve, 0));
+
+      const offlineCtx = new OfflineAudioContext(2, renderSamples, sampleRate);
+      await offlineCtx.audioWorklet.addModule('/realtime-engine.worklet.js');
+      const engineNode = new AudioWorkletNode(offlineCtx, 'realtime-engine', { numberOfOutputs: 1, outputChannelCount: [2] });
+      const inGain = offlineCtx.createGain(); inGain.gain.value = 1.0;
+      const lpf = offlineCtx.createBiquadFilter(); lpf.type = 'lowpass'; lpf.frequency.value = 800; lpf.Q.value = 1;
+      const bassFilter = offlineCtx.createBiquadFilter(); bassFilter.type = 'lowshelf'; bassFilter.frequency.value = 200; bassFilter.gain.value = (processing.bass - 50) / 5;
+      const masterGain = offlineCtx.createGain(); masterGain.gain.value = 1.0;
+      engineNode.connect(inGain); inGain.connect(lpf); lpf.connect(bassFilter); bassFilter.connect(masterGain); masterGain.connect(offlineCtx.destination);
+
+      const t = offlineCtx.currentTime;
+      Object.entries(layers).forEach(([k, c]) => {
+        engineNode.parameters.get(`${k}_intensity`)?.setValueAtTime((c.intensity ?? 0) / 100, t);
+        engineNode.parameters.get(`${k}_volume`)?.setValueAtTime((c.volume ?? 100) / 100, t);
+        engineNode.parameters.get(`${k}_bass`)?.setValueAtTime((c.bass ?? 50) / 100, t);
+        engineNode.parameters.get(`${k}_texture`)?.setValueAtTime((c.texture ?? 50) / 100, t);
+      });
+      Object.entries(brainwaves).forEach(([k, c]) => {
+        engineNode.parameters.get(`${k}_enabled`)?.setValueAtTime(c.enabled ? 1 : 0, t);
+        engineNode.parameters.get(`${k}_carrier`)?.setValueAtTime(c.carrier ?? 200, t);
+        engineNode.parameters.get(`${k}_beat`)?.setValueAtTime(c.beat ?? 10, t);
+        engineNode.parameters.get(`${k}_intensity`)?.setValueAtTime((c.intensity ?? 50) / 100, t);
+      });
+      engineNode.parameters.get('stereoDecorr')?.setValueAtTime((processing.stereoDecorr ?? 0) / 100, t);
+      engineNode.parameters.get('stereoWidth')?.setValueAtTime((processing.stereoWidth ?? 100) / 50, t);
+      engineNode.parameters.get('harmonicSat')?.setValueAtTime((processing.harmonicSat ?? 0) / 100, t);
+      engineNode.parameters.get('spectralDrift')?.setValueAtTime((processing.spectralDrift ?? 0) / 100, t);
+      engineNode.parameters.get('temporalSmooth')?.setValueAtTime((processing.temporalSmooth ?? 0) / 100, t);
+      engineNode.parameters.get('layerInteract')?.setValueAtTime((processing.layerInteract ?? 0) / 100, t);
+      engineNode.parameters.get('microRandom')?.setValueAtTime((processing.microRandom ?? 0) / 100, t);
+      engineNode.parameters.get('treble')?.setValueAtTime((processing.treble ?? 55) / 100, t);
+      engineNode.parameters.get('mid')?.setValueAtTime((processing.mid ?? 55) / 100, t);
+      engineNode.parameters.get('pressure')?.setValueAtTime((processing.pressure ?? 50) / 100, t);
+      engineNode.parameters.get('master')?.setValueAtTime(1.0, t);
+
+      if (Object.keys(enabledNatureBuffers).length > 0) {
+        const natureBus = offlineCtx.createGain();
+        natureBus.gain.value = 1.0;
+        natureBus.connect(masterGain);
+        const chunkStartSec = chunkIndex * chunkDuration;
+        Object.entries(enabledNatureBuffers).forEach(([, { buffer, volume }]) => {
+          const bufDuration = buffer.duration;
+          const loopOffset = chunkStartSec % bufDuration;
+          const src = offlineCtx.createBufferSource();
+          src.buffer = buffer;
+          src.loop = true;
+          src.loopStart = 0;
+          src.loopEnd = bufDuration;
+          const g = offlineCtx.createGain();
+          g.gain.value = volume / 100;
+          src.connect(g);
+          g.connect(natureBus);
+          src.start(0, loopOffset, renderDuration);
+        });
+      }
+
+      // Mientras renderizamos este chunk, esperamos el encoding del chunk anterior
+      if (pendingEncode) {
+        const mp3Part = await pendingEncode.promise;
+        if (mp3Part.length > 0) blobParts.push(mp3Part);
+        pendingEncode = null;
+      }
+
+      let renderedBuffer = await offlineCtx.startRendering();
+      let leftData = renderedBuffer.getChannelData(0);
+      let rightData = renderedBuffer.getChannelData(1);
+      renderedBuffer = null;
+
+      try { if (offlineCtx.close) { await offlineCtx.close(); } } catch {}
+      engineNode.disconnect();
+
+      if (chunkIndex === 0 && extraDiscard > 0) {
+        const discardSamples = Math.floor(sampleRate * extraDiscard);
+        leftData = leftData.slice(discardSamples);
+        rightData = rightData.slice(discardSamples);
+      }
+
+      const chunkLength = leftData.length;
+      if (chunkIndex === 0) {
+        const fadeInSamples = Math.floor(sampleRate * 0.02);
+        for (let j = 0; j < fadeInSamples && j < chunkLength; j++) { const g = j / fadeInSamples; leftData[j] *= g; rightData[j] *= g; }
+      }
+      if (isLastChunk) {
+        const fadeOutSamples = Math.floor(sampleRate * 0.05);
+        const fadeStart = Math.max(0, chunkLength - fadeOutSamples);
+        for (let j = fadeStart; j < chunkLength; j++) { const g = 1 - ((j - fadeStart) / fadeOutSamples); leftData[j] *= g; rightData[j] *= g; }
+      }
+
+      if (isMP3) {
+        // Lanzamos encoding en worker SIN esperar — corre en paralelo con el siguiente render
+        pendingEncode = {
+          promise: encodeChunkWithWorker(mp3Worker, leftData, rightData, chunkIndex)
+        };
+        leftData = null; rightData = null;
+      } else {
+        blobParts.push(floatStereoToPCM24(leftData, rightData));
+        totalFrames += chunkLength;
+        leftData = null; rightData = null;
+      }
+
+      const elapsedSeconds = Math.floor((Date.now() - startTime) / 1000);
+      const chunksCompleted = chunkIndex + 1;
+      const progress = Math.floor((chunksCompleted / numChunks) * 100);
+      const avgTimePerChunk = elapsedSeconds / chunksCompleted;
+      const estimatedSecondsLeft = (numChunks - chunksCompleted) > 0
+        ? Math.floor(avgTimePerChunk * (numChunks - chunksCompleted))
+        : 0;
+      setExportProgress({ isExporting: true, currentChunk: chunksCompleted, totalChunks: numChunks, percentage: Math.min(99, progress), elapsedTime: elapsedSeconds, estimatedTimeLeft: estimatedSecondsLeft, stage: 'rendering' });
+      await new Promise(resolve => setTimeout(resolve, 0));
+    }
+
+    // Esperar el último chunk pendiente
+    if (pendingEncode) {
+      const mp3Part = await pendingEncode.promise;
+      if (mp3Part.length > 0) blobParts.push(mp3Part);
+      pendingEncode = null;
+    }
+
+    setExportProgress(prev => ({ ...prev, stage: 'complete', percentage: 100 }));
+    await new Promise(resolve => setTimeout(resolve, 80));
+
+    let finalBlob, filename, mimeType;
+    if (isMP3) {
+      const tail = await flushMP3Worker(mp3Worker);
+      if (tail.length > 0) blobParts.push(tail);
+      mp3Worker = null;
+      mimeType = 'audio/mpeg';
+      filename = `sound-export-${Date.now()}.mp3`;
+      finalBlob = new Blob(blobParts, { type: mimeType });
+    } else {
+      const header = buildWavHeader(totalFrames, sampleRate);
+      mimeType = 'audio/wav';
+      filename = `sound-export-${Date.now()}.wav`;
+      finalBlob = new Blob([header, ...blobParts], { type: mimeType });
+    }
+
+    const url = URL.createObjectURL(finalBlob);
+    finalBlob = null;
+    const a = document.createElement('a');
+    a.href = url; a.download = filename; a.style.display = 'none';
+    document.body.appendChild(a); a.click();
+    setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 3000);
+
+    const totalElapsedSeconds = Math.floor((Date.now() - startTime) / 1000);
+    setExportProgress({ isExporting: false, currentChunk: numChunks, totalChunks: numChunks, percentage: 100, elapsedTime: totalElapsedSeconds, estimatedTimeLeft: 0, stage: 'complete' });
+
+    if (notificationsEnabled && Notification.permission === 'granted') {
+      new Notification('🎵 Export Complete!', { body: `Your ${formatTime(totalDuration)} audio file is ready!\nFile: ${filename}`, icon: '/favicon.ico', tag: 'export-complete' });
+    }
+    setTimeout(() => { alert(`✅ Export complete!\n\nFile: ${filename}\nDuration: ${totalDuration}s\nChunks: ${numChunks}\nTime: ${totalElapsedSeconds}s`); }, 100);
+    setTimeout(() => { setExportProgress({ isExporting: false, currentChunk: 0, totalChunks: 0, percentage: 0, elapsedTime: 0, estimatedTimeLeft: 0, stage: '' }); }, 8000);
+  };
+
+  const expSound = async () => {
+    if (exportProgress.isExporting || isGenerating) return;
+    const fmt = exportConfig.format;
+    let sampleRate, isMP3, formatType, formatDetail;
+    switch (fmt) {
+      case 'wav24_44': sampleRate = 44100; isMP3 = false; formatType = 'wav'; formatDetail = '24'; break;
+      case 'wav24_48': sampleRate = 48000; isMP3 = false; formatType = 'wav'; formatDetail = '24'; break;
+      case 'mp3_320':  sampleRate = 44100; isMP3 = true;  formatType = 'mp3'; formatDetail = '320'; break;
+      case 'mp3_256':  sampleRate = 44100; isMP3 = true;  formatType = 'mp3'; formatDetail = '256'; break;
+      case 'mp3_192':  sampleRate = 44100; isMP3 = true;  formatType = 'mp3'; formatDetail = '192'; break;
+      case 'mp3_160':  sampleRate = 44100; isMP3 = true;  formatType = 'mp3'; formatDetail = '160'; break;
+      case 'mp3_128':  sampleRate = 44100; isMP3 = true;  formatType = 'mp3'; formatDetail = '128'; break;
+      default:         sampleRate = 48000; isMP3 = false; formatType = 'wav'; formatDetail = '24'; break;
+    }
+    setIsGenerating(true);
+    try {
+      await expSoundChunked(exportConfig.duration, sampleRate, isMP3, formatType, formatDetail);
+    } catch (err) {
+      console.error('Export failed:', err);
+      alert(`❌ Export failed: ${err.message}`);
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  // ================= PRESETS =================
+  const PRESETS = {
+    DeepSleep: {
+      layers: {
+        pink:  { intensity: 62, volume: 55,  texture: 18, bass: 50, brightness: 50 },
+        brown: { intensity: 100, volume: 87, texture: 15, bass: 50, brightness: 50 },
+        grey:  { intensity: 100, volume: 87, texture: 15, bass: 50, brightness: 50 },
+      },
+      brainwaves: {},
+      natureSounds: { storm: { enabled: true, volume: 7 } },
+      processing: { bass: 50, treble: 55, mid: 55, stereoWidth: 120, pressure: 50, stereoDecorr: 35 }
+    },
+    CalmMind: {
+      layers: {
+        pink:  { intensity: 48, volume: 44,  texture: 22, bass: 50, brightness: 50 },
+        brown: { intensity: 87, volume: 100, texture: 14, bass: 50, brightness: 50 },
+        grey:  { intensity: 50, volume: 83,  texture: 18, bass: 50, brightness: 50 },
+        green: { intensity: 46, volume: 60,  texture: 26, bass: 50, brightness: 50 },
+      },
+      brainwaves: { alpha: { enabled: true, carrier: 180, beat: 10, intensity: 14 } },
+      natureSounds: { rain: { enabled: true, volume: 1 } },
+      processing: { bass: 50, treble: 55, mid: 55, stereoWidth: 120, pressure: 50, stereoDecorr: 35 }
+    },
+    DeepFocus: {
+      layers: {
+        white: { intensity: 46, volume: 42,  texture: 18, bass: 50, brightness: 50 },
+        pink:  { intensity: 50, volume: 100, texture: 16, bass: 50, brightness: 50 },
+        brown: { intensity: 87, volume: 100, texture: 50, bass: 50, brightness: 50 },
+        blue:  { intensity: 50, volume: 100, texture: 24, bass: 50, brightness: 50 },
+      },
+      brainwaves: { beta: { enabled: true, carrier: 220, beat: 13, intensity: 16 } },
+      natureSounds: {},
+      processing: { bass: 50, treble: 55, mid: 55, stereoWidth: 120, pressure: 50, stereoDecorr: 35 }
+    },
+    ADHDSupport: {
+      layers: {
+        white: { intensity: 38, volume: 100, texture: 20, bass: 50, brightness: 50 },
+        pink:  { intensity: 44, volume: 40,  texture: 24, bass: 50, brightness: 50 },
+        brown: { intensity: 90, volume: 100, texture: 18, bass: 50, brightness: 50 },
+        green: { intensity: 64, volume: 100, texture: 30, bass: 50, brightness: 50 },
+      },
+      brainwaves: {},
+      natureSounds: { rain: { enabled: true, volume: 4 } },
+      processing: { bass: 50, treble: 55, mid: 55, stereoWidth: 120, pressure: 50, stereoDecorr: 35 }
+    },
+    MeditationFlow: {
+      layers: {
+        pink:  { intensity: 78,  volume: 100, texture: 22, bass: 50, brightness: 50 },
+        brown: { intensity: 100, volume: 100, texture: 16, bass: 50, brightness: 50 },
+        green: { intensity: 87,  volume: 100, texture: 30, bass: 50, brightness: 50 },
+      },
+      brainwaves: { theta: { enabled: true, carrier: 160, beat: 6, intensity: 14 } },
+      natureSounds: {},
+      processing: { bass: 50, treble: 55, mid: 55, stereoWidth: 120, pressure: 50, stereoDecorr: 35 }
+    },
+    TinnitusMasking: {
+      layers: {
+        white:  { intensity: 100, volume: 100, texture: 100, bass: 50, brightness: 50 },
+        blue:   { intensity: 100, volume: 100, texture: 100, bass: 50, brightness: 50 },
+        violet: { intensity: 100, volume: 100, texture: 100, bass: 50, brightness: 50 },
+      },
+      brainwaves: {},
+      natureSounds: { waterfall: { enabled: true, volume: 50 } },
+      processing: { bass: 50, treble: 55, mid: 55, stereoWidth: 120, pressure: 50, stereoDecorr: 35 }
+    },
+    DeepSpace: {
+      layers: {
+        pink:  { intensity: 72,  volume: 100, texture: 12,  bass: 50, brightness: 50 },
+        brown: { intensity: 100, volume: 100, texture: 55,  bass: 50, brightness: 50 },
+        blue:  { intensity: 71,  volume: 100, texture: 28,  bass: 50, brightness: 50 },
+        black: { intensity: 100, volume: 100, texture: 100, bass: 50, brightness: 50 },
+      },
+      brainwaves: { theta: { enabled: true, carrier: 150, beat: 5, intensity: 12 } },
+      natureSounds: {},
+      processing: { bass: 50, treble: 55, mid: 55, stereoWidth: 120, pressure: 50, stereoDecorr: 35 }
+    },
+    MentalReset: {
+      layers: {
+        white: { intensity: 45,  volume: 100, texture: 18, bass: 50, brightness: 50 },
+        pink:  { intensity: 46,  volume: 100, texture: 22, bass: 50, brightness: 50 },
+        brown: { intensity: 100, volume: 100, texture: 14, bass: 50, brightness: 50 },
+        blue:  { intensity: 100, volume: 100, texture: 69, bass: 50, brightness: 50 },
+        green: { intensity: 75,  volume: 100, texture: 30, bass: 50, brightness: 50 },
+      },
+      brainwaves: {},
+      natureSounds: { wind: { enabled: true, volume: 40 } },
+      processing: { bass: 50, treble: 55, mid: 55, stereoWidth: 120, pressure: 50, stereoDecorr: 35 }
+    },
+  };
+
+  const applyPreset = async (k) => {
+    if (isApplyingPresetRef.current) return;
+    isApplyingPresetRef.current = true;
+
+    const p = PRESETS[k];
+    if (!p) {
+      isApplyingPresetRef.current = false;
+      return;
+    }
+
+    if (activePreset === k) {
+      setActivePreset(null);
+      setLayers((prev) => {
+        const resetLayers = {};
+        Object.keys(prev).forEach((layerKey) => { resetLayers[layerKey] = { intensity: 0, bass: 50, volume: 100, texture: 50, brightness: 50 }; });
+        return resetLayers;
+      });
+      setBrainwaves((prev) => {
+        const resetWaves = {};
+        Object.keys(prev).forEach((waveKey) => { resetWaves[waveKey] = { ...prev[waveKey], enabled: false }; });
+        return resetWaves;
+      });
+      setProcessing({ bass: 50, treble: 55, mid: 55, stereoWidth: 120, pressure: 50, stereoDecorr: 35, harmonicSat: 0, spectralDrift: 0, temporalSmooth: 0, layerInteract: 0, microRandom: 0 });
+      killAllNatureNow();
+      setNatureSounds(prev => {
+        const reset = {};
+        Object.keys(prev).forEach(sk => { reset[sk] = { ...prev[sk], enabled: false }; });
+        return reset;
+      });
+      if (isPlaying) play();
+      setTimeout(() => { isApplyingPresetRef.current = false; }, 600);
+      return;
+    }
+
+    setActivePreset(k);
+    setLayers((prev) => {
+      const resetLayers = {};
+      Object.keys(prev).forEach((layerKey) => { resetLayers[layerKey] = { intensity: 0, bass: 50, volume: 100, texture: 50, brightness: 50 }; });
+      return resetLayers;
+    });
+    setBrainwaves((prev) => {
+      const resetWaves = {};
+      Object.keys(prev).forEach((waveKey) => { resetWaves[waveKey] = { ...prev[waveKey], enabled: false }; });
+      return resetWaves;
+    });
+    setProcessing({ bass: 50, treble: 55, mid: 55, stereoWidth: 120, pressure: 50, stereoDecorr: 35, harmonicSat: 0, spectralDrift: 0, temporalSmooth: 0, layerInteract: 0, microRandom: 0 });
+
+    killAllNatureNow();
+    setNatureSounds(prev => {
+      const reset = {};
+      Object.keys(prev).forEach(sk => { reset[sk] = { ...prev[sk], enabled: false }; });
+      return reset;
+    });
+
+    setTimeout(() => {
+      setLayers((prev) => {
+        const newLayers = { ...prev };
+        Object.keys(newLayers).forEach((layerKey) => {
+          newLayers[layerKey] = p.layers?.[layerKey] || { intensity: 0, bass: 50, volume: 100, texture: 50, brightness: 50 };
+        });
+        return simpleMode ? sanitizeLayersForSimple(newLayers) : newLayers;
+      });
+      setBrainwaves((prev) => {
+        const merged = { ...prev };
+        Object.keys(merged).forEach((waveKey) => { merged[waveKey] = { ...merged[waveKey], enabled: false }; });
+        if (p.brainwaves) {
+          Object.keys(p.brainwaves).forEach((waveKey) => {
+            if (merged[waveKey]) merged[waveKey] = { ...merged[waveKey], ...p.brainwaves[waveKey] };
+          });
+        }
+        return simpleMode ? sanitizeBrainwavesForSimple(merged) : merged;
+      });
+      setProcessing((prev) => ({ ...prev, ...(p.processing || {}) }));
+
+      // Apply nature sounds from preset and start them imperatively if playing
+      if (p.natureSounds) {
+        setNatureSounds(prev => {
+          const next = { ...prev };
+          Object.keys(p.natureSounds).forEach(sk => {
+            if (next[sk]) next[sk] = { ...next[sk], ...p.natureSounds[sk] };
+          });
+          return next;
+        });
+        // Start preset nature sounds imperatively if already playing
+        if (isPlayingRef.current) {
+          Object.entries(p.natureSounds).forEach(([sk, cfg]) => {
+            if (cfg.enabled && !natureAudioRefs.current[sk]) {
+              startNatureSound(sk, cfg.volume ?? 70);
+            }
+          });
+        }
+      }
+
+      if (!isPlaying) play();
+      setTimeout(() => { isApplyingPresetRef.current = false; }, 600);
+    }, 150);
+  };
+
+  // ================= TEXT HELPERS =================
+  const getLayerDesc = (k) => {
+    const d = {
+      white: '✨ Bright, constant - Crystal clear focus',
+      pink: '🌸 Balanced, natural - Like gentle rain',
+      brown: '🌊 Deep, warm - Like distant ocean waves',
+      grey: '☁️ Smooth, neutral - Easy listening comfort',
+      blue: '💎 Crisp, airy - Fresh mountain breeze',
+      violet: '⚡ Sharp, clean - High energy clarity',
+      black: '🌑 Ultra-deep - Very calming depths',
+      green: '🌿 Nature-like - Forest ambience'
+    };
+    return d[k] || '';
+  };
+
+  const getBrainDesc = (k) => {
+    const d = {
+      alpha: '🧘 Relaxed focus & creativity (10 Hz)',
+      theta: '💭 Deep meditation & intuition (6 Hz)',
+      delta: '😴 Deep sleep & healing (2 Hz)',
+      beta: '🎯 Active thinking & alertness (20 Hz)',
+      gamma: '⚡ Peak performance & insight (40 Hz)'
+    };
+    return d[k] || '';
+  };
+
+  const formatTime = (seconds) => {
+    if (seconds < 60) return `${seconds}s`;
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    if (mins < 60) return `${mins}m ${secs}s`;
+    const hours = Math.floor(mins / 60);
+    const remainingMins = mins % 60;
+    return `${hours}h ${remainingMins}m`;
+  };
+// ================= EXPORT DURATION BUTTONS WITH ESTIMATES =================
+const ExportDurationButtons = ({ format }) => {
+  const estimate = getEstimateForDuration(exportConfig.duration, format);
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-yellow-200 font-medium text-sm">Duration</span>
+        {estimate && (
+          <span className="text-yellow-300 font-semibold text-sm tabular-nums">
+            {estimate} approx
+          </span>
+        )}
+      </div>
+      <div className="grid grid-cols-4 gap-2 mb-4">
+        {quickDurations.map((option) => (
+          <button
+            key={option.label}
+            onClick={() => setExportConfig(pr => ({ ...pr, duration: option.seconds }))}
+            className={`px-3 py-3 rounded-lg text-xs font-semibold transition-all duration-300 border-2 shadow-md ${
+              exportConfig.duration === option.seconds
+                ? 'bg-gradient-to-r from-yellow-400 to-yellow-300 text-black border-yellow-500 shadow-yellow-400/50'
+                : 'bg-slate-900 text-yellow-200 border-yellow-400/30 hover:border-yellow-400/60'
+            }`}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+  // ================= UI =================
+  return (
+    <div className="w-screen h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+      <div className="w-full h-full p-4 sm:p-6">
+        <div className="w-full h-full bg-gradient-to-b from-slate-900/95 to-slate-950/95 backdrop-blur-xl rounded-2xl border border-yellow-400/30 shadow-2xl shadow-yellow-400/10 overflow-y-auto">
+
+          {/* HEADER */}
+          <div className="p-6 border-b border-yellow-400/20 bg-gradient-to-r from-slate-900/50 to-slate-800/50">
+            <div className="flex items-center justify-between">
+              <div>
+                <h1 className="text-3xl font-bold bg-gradient-to-r from-yellow-200 via-yellow-300 to-yellow-400 bg-clip-text text-transparent mb-1">
+                  Advanced Sound Engine 3D
+                </h1>
+                <p className="text-yellow-200/80 text-sm">✨ Professional 3D audio with crystal-clear quality</p>
+              </div>
+              <Waves className="w-12 h-12 text-yellow-300 animate-pulse" />
+            </div>
+          </div>
+
+          {/* PRESETS SECTION */}
+          <div className="p-6 border-b border-yellow-400/10 bg-gradient-to-b from-transparent to-slate-900/30">
+            {simpleMode ? (
+              simpleView === 'main' ? (
+                <div className="space-y-3">
+                  {SIMPLE_PRESET_KEYS.filter(k => PRESETS[k]).map(p => (
+                    <button
+                      key={p}
+                      onClick={() => {
+                        if (isTransitioning) return;
+                        applyPreset(p);
+                      }}
+                      className={`w-full text-left px-5 py-4 rounded-xl transition-all duration-300 border-2 font-semibold shadow-lg ${
+                        activePreset === p
+                          ? 'bg-gradient-to-r from-yellow-400 to-yellow-300 text-black border-yellow-500 shadow-yellow-400/50 scale-105'
+                          : 'bg-gradient-to-r from-slate-800 to-slate-700 text-white border-yellow-400/30 hover:border-yellow-400/60 hover:shadow-yellow-400/30 hover:scale-105'
+                      }`}
+                    >
+                      <div className="capitalize text-lg">
+                        {p.replace(/([A-Z])/g, ' $1').trim()}
+                      </div>
+                    </button>
+                  ))}
+
+                  <button
+                    onClick={() => setSimpleView('export')}
+                    className="w-full bg-gradient-to-r from-slate-800 to-slate-700 text-white px-5 py-4 rounded-xl transition-all duration-300 hover:from-yellow-400 hover:to-yellow-300 hover:text-black border-2 border-yellow-400/30 hover:border-yellow-500 font-semibold shadow-lg hover:shadow-yellow-400/30 hover:scale-105"
+                  >
+                    📥 Export Audio
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <button
+                    onClick={() => setSimpleView('main')}
+                    className="bg-gradient-to-r from-slate-800 to-slate-700 text-white px-4 py-3 rounded-lg hover:from-yellow-400 hover:to-yellow-300 hover:text-black transition-all duration-300 border-2 border-yellow-400/30 hover:border-yellow-500 font-semibold shadow-md"
+                  >
+                    ← Back to Presets
+                  </button>
+
+                  <div className="bg-slate-800/50 p-5 rounded-lg border-2 border-yellow-400/20">
+                    <label className="block text-yellow-200 font-medium text-sm mb-3">Quality</label>
+                    <select
+                      value={exportConfig.format}
+                      onChange={(e) => setExportConfig(pr => ({ ...pr, format: e.target.value }))}
+                      className="w-full bg-slate-900 text-yellow-200 px-4 py-3 rounded-lg text-sm border-2 border-yellow-400/30 focus:border-yellow-400"
+                    >
+                      <option value="wav24_44">24-bit / 44.1kHz</option>
+                      <option value="wav24_48">24-bit / 48kHz</option>
+                      <option value="mp3_320">MP3 / 320 kbps</option>
+                      <option value="mp3_256">MP3 / 256 kbps</option>
+                      <option value="mp3_192">MP3 / 192 kbps</option>
+                      <option value="mp3_160">MP3 / 160 kbps</option>
+                      <option value="mp3_128">MP3 / 128 kbps</option>
+                    </select>
+                  </div>
+
+                  <div className="bg-slate-800/50 p-5 rounded-lg border-2 border-yellow-400/20">
+                    <label className="block text-yellow-200 font-medium text-sm mb-3">Duration</label>
+                    <ExportDurationButtons format={exportConfig.format} />
+                    <div>
+                      <label className="block text-yellow-200/70 text-xs mb-2">
+                        Custom (seconds): <span {...NT}>{exportConfig.duration}</span>
+                      </label>
+                      <input
+                        type="number"
+                        value={exportConfig.duration}
+                        onChange={(e) => setExportConfig(pr => ({ ...pr, duration: parseInt(e.target.value) || 60 }))}
+                        className="w-full bg-slate-900 text-yellow-200 px-4 py-3 rounded-lg text-sm border-2 border-yellow-400/30 focus:border-yellow-400"
+                        min="10" max="28800"
+                      />
+                      <p className="text-xs text-yellow-200/60 mt-2">Range: <span {...NT}>10</span> seconds to <span {...NT}>8</span> hours</p>
+                    </div>
+                  </div>
+
+                  {Notification.permission !== 'granted' && (
+                    <button onClick={requestNotificationPermission} className="w-full bg-gradient-to-r from-slate-800 to-slate-700 text-white px-5 py-3 rounded-lg font-semibold transition-all duration-300 hover:from-yellow-400 hover:to-yellow-300 hover:text-black border-2 border-yellow-400/30 hover:border-yellow-500 flex items-center justify-center gap-2 text-sm shadow-md">
+                      🔔 Enable notifications (recommended for long exports)
+                    </button>
+                  )}
+                  {notificationsEnabled && (
+                    <div className="bg-green-500/10 border-2 border-green-400/30 rounded-lg p-4">
+                      <p className="text-green-200 text-xs text-center">✅ Notifications enabled - You'll be notified when export completes</p>
+                    </div>
+                  )}
+
+                  <button
+                    onClick={expSound}
+                    disabled={isGenerating}
+                    className="w-full bg-gradient-to-r from-yellow-400 to-yellow-300 hover:from-yellow-300 hover:to-yellow-200 text-black px-6 py-4 rounded-xl font-bold transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3 border-2 border-yellow-500/50 shadow-lg hover:shadow-yellow-400/50 text-lg"
+                  >
+                    {isGenerating ? (<><div className="w-5 h-5 border-2 border-black/30 border-t-black rounded-full animate-spin" />Exporting...</>) : (<><Download className="w-6 h-6" />Export Audio</>)}
+                  </button>
+                </div>
+              )
+            ) : (
+              <div className="grid grid-cols-2 gap-2" style={{ isolation: 'isolate' }}>
+
+                {ADVANCED_PRESET_KEYS.map(p => (
+                  <button
+                    key={p}
+                    onClick={() => {
+                      if (isTransitioning) return;
+                      applyPreset(p);
+                    }}
+                    className={`px-4 py-3 rounded-lg text-sm transition-all duration-300 border-2 font-semibold shadow-md ${
+                      activePreset === p
+                        ? 'bg-gradient-to-r from-yellow-400 to-yellow-300 text-black border-yellow-500 shadow-yellow-400/50 ring-2 ring-yellow-400/50'
+
+                        : 'bg-gradient-to-r from-slate-800 to-slate-700 text-white border-yellow-400/30 hover:border-yellow-400/60 hover:shadow-yellow-400/30'
+                    }`}
+                  >
+                    {p.replace(/([A-Z])/g, ' $1').trim()}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* MODE SELECTOR */}
+          <div className="px-6 pt-4">
+            <div className="flex items-center justify-between bg-slate-800/50 rounded-lg p-3 border border-yellow-400/20">
+              <div className="text-sm text-yellow-200/90">
+                Mode: <span className="font-semibold text-yellow-300">{simpleMode ? 'Simple' : 'Advanced'}</span>
+              </div>
+              <button
+                onClick={() => { setSimpleMode(s => !s); setSimpleView('main'); }}
+                className="text-xs px-4 py-2 rounded-lg bg-gradient-to-r from-yellow-400 to-yellow-300 text-black hover:from-yellow-300 hover:to-yellow-200 transition-all duration-300 border-2 border-yellow-500/50 font-semibold shadow-md hover:shadow-yellow-400/50"
+              >
+                {simpleMode ? '🔧 Switch to Advanced' : '🎯 Switch to Simple'}
+              </button>
+            </div>
+          </div>
+
+          {/* TABS (Advanced Mode Only) */}
+          {!simpleMode && (
+            <div className="mt-4 px-6">
+              <div className="flex gap-2 border-b border-yellow-400/10 pb-3">
+                {['layers', 'nature', 'brainwaves', 'export'].map(t => (
+                  <button
+                    key={t}
+                    onClick={() => setActiveTab(t)}
+                    className={`flex-1 py-3 rounded-xl font-semibold transition-all duration-300 border-2 text-xs sm:text-sm shadow-md
+                      ${activeTab === t
+                        ? 'bg-gradient-to-r from-yellow-400 to-yellow-300 text-black border-yellow-500 shadow-yellow-400/50'
+                        : 'bg-gradient-to-r from-slate-800 to-slate-700 text-white border-yellow-400/20 hover:border-yellow-400/50 hover:shadow-yellow-400/30'
+                      }`}
+                  >
+                    {t.charAt(0).toUpperCase() + t.slice(1)}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* MAIN CONTENT */}
+          <div className="p-6">
+            {simpleMode && simpleView === 'main' ? (
+              <div className="space-y-5">
+                <div className="bg-gradient-to-r from-yellow-400/10 to-yellow-300/10 border-2 border-yellow-400/30 rounded-lg p-4">
+<p className="text-yellow-200 text-xs">💡 <strong>3D Audio Tip:</strong> Choose a preset above for instant professional-grade 3D sound with perfectly balanced frequencies &nbsp;·&nbsp; 🎧 Headphones recommended for full 3D effect</p>
+                </div>
+
+                <div>
+                  <h4 className="text-yellow-200 text-sm font-semibold mb-4">🎨 Sound Colors</h4>
+                  {SIMPLE_ALLOWED_LAYERS.map((t) => {
+                    const c = layers[t];
+                    if (!c) return null;
+                    return (
+                      <div key={t} className="bg-slate-800/50 p-4 rounded-lg border-2 border-yellow-400/20 mb-4 hover:border-yellow-400/40 transition-all duration-300">
+                        <div className="flex items-start justify-between mb-3">
+                          <div>
+                            <h5 className="text-yellow-200 font-medium capitalize text-sm">{t} Noise</h5>
+                            <p className="text-yellow-200/60 text-xs mt-1">{getLayerDesc(t)}</p>
+                          </div>
+                        </div>
+                        <div className="space-y-3">
+                          <div>
+                            <label className="block text-yellow-200/70 text-xs mb-2">Intensity: <span {...NT}>{c.intensity}%</span></label>
+                            <input type="range" min="0" max="100" value={c.intensity} onChange={(e) => setLayers(pr => ({ ...pr, [t]: { ...pr[t], intensity: parseInt(e.target.value) } }))} className="w-full h-2 bg-slate-700/50 rounded-lg appearance-none cursor-pointer accent-yellow-400" />
+                          </div>
+                          {c.intensity > 0 && (
+                            <>
+                              <div>
+                                <label className="block text-yellow-200/70 text-xs mb-2">Volume: <span {...NT}>{c.volume}%</span></label>
+                                <input type="range" min="0" max="100" value={c.volume} onChange={(e) => setLayers(pr => ({ ...pr, [t]: { ...pr[t], volume: parseInt(e.target.value) } }))} className="w-full h-2 bg-slate-700/50 rounded-lg appearance-none cursor-pointer accent-yellow-400" />
+                              </div>
+                              <div>
+                                <label className="block text-yellow-200/70 text-xs mb-2">Texture: <span {...NT}>{c.texture}%</span></label>
+                                <input type="range" min="0" max="100" value={c.texture} onChange={(e) => setLayers(pr => ({ ...pr, [t]: { ...pr[t], texture: parseInt(e.target.value) } }))} className="w-full h-2 bg-slate-700/50 rounded-lg appearance-none cursor-pointer accent-yellow-400" />
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* NATURE SOUNDS - Simple Mode */}
+                <div>
+                  <h4 className="text-yellow-200 text-sm font-semibold mb-4">🌿 Nature Sounds</h4>
+                  {['rain', 'ocean'].map((soundKey) => {
+                    const soundConfig = natureSounds[soundKey];
+                    const soundNames = {
+                      rain: { name: '🌧️ Rain', desc: 'Gentle rain sounds' },
+                      ocean: { name: '🌊 Ocean Waves', desc: 'Calm ocean waves with birds' }
+                    };
+                    const info = soundNames[soundKey];
+                    return (
+                      <div key={soundKey} className="bg-slate-800/50 p-4 rounded-lg border-2 border-yellow-400/20 mb-3 hover:border-yellow-400/40 transition-all duration-300">
+                        <div className="flex items-start justify-between mb-2">
+                          <div>
+                            <h5 className="text-yellow-200 font-medium text-sm">{info.name}</h5>
+                            <p className="text-yellow-200/60 text-xs mt-0.5">{info.desc}</p>
+                          </div>
+                          <label className="text-xs text-yellow-200/70 flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={soundConfig.enabled}
+                              onChange={(e) => handleNatureToggle(soundKey, e.target.checked)}
+                              className="w-4 h-4 accent-yellow-400"
+                            />
+                            Enable
+                          </label>
+                        </div>
+                        {soundConfig.enabled && (
+                          <div>
+                            <label className="block text-yellow-200/70 text-xs mb-1">Volume: <span {...NT}>{soundConfig.volume}%</span></label>
+                            <input type="range" min="0" max="100" value={soundConfig.volume} onChange={(e) => setNatureSounds(prev => ({ ...prev, [soundKey]: { ...prev[soundKey], volume: parseInt(e.target.value) } }))} className="w-full h-2 bg-slate-700/50 rounded-lg appearance-none cursor-pointer accent-yellow-400" />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* BRAINWAVES - Simple Mode */}
+                <div>
+                  <h4 className="text-yellow-200 text-sm font-semibold mb-3">🧠 Brainwaves</h4>
+                  {(() => {
+                    const t = 'alpha';
+                    const c = brainwaves[t];
+                    if (!c) return null;
+                    return (
+                      <div className="bg-slate-800/50 p-4 rounded-lg border-2 border-yellow-400/20 hover:border-yellow-400/40 transition-all duration-300">
+                        <div className="flex items-center justify-between mb-2">
+                          <h5 className="text-yellow-200 font-medium capitalize text-sm">{t} Wave</h5>
+                          <label className="text-xs text-yellow-200/70 flex items-center gap-2 cursor-pointer">
+                            <input type="checkbox" checked={c.enabled} onChange={(e) => setBrainwaves(pr => ({ ...pr, [t]: { ...pr[t], enabled: e.target.checked } }))} className="w-4 h-4 accent-yellow-400" />
+                            Enabled
+                          </label>
+                        </div>
+                        <p className="text-yellow-200/60 text-xs mb-3">{getBrainDesc(t)}</p>
+                        {c.enabled && (
+                          <div className="space-y-2">
+                            <div>
+                              <label className="block text-xs text-yellow-200/70 mb-1">Wave Intensity: <span {...NT}>{c.intensity}%</span></label>
+                              <input type="range" min="0" max="100" value={c.intensity} onChange={(e) => setBrainwaves(pr => ({ ...pr, [t]: { ...pr[t], intensity: parseInt(e.target.value) } }))} className="w-full h-2 bg-slate-700/50 rounded-lg appearance-none cursor-pointer accent-yellow-400" />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+                </div>
+              </div>
+            ) : !simpleMode && (
+              <div className="space-y-4">
+                {activeTab === 'layers' && (
+                  <div className="space-y-4">
+                    <div className="bg-gradient-to-r from-yellow-400/10 to-yellow-300/10 border-2 border-yellow-400/30 rounded-lg p-4 mb-4">
+<p className="text-yellow-200 text-xs">🎨 <strong>Sound Colors:</strong> Each noise type has a unique frequency profile. Mix and match to create your perfect soundscape with crystal-clear 3D audio. &nbsp;·&nbsp; 🎧 Best experienced with headphones on</p>
+                    </div>
+                    {Object.entries(layers).map(([t, c]) => (
+                      <div key={t} className="bg-slate-800/50 p-4 rounded-lg border-2 border-yellow-400/20 hover:border-yellow-400/40 transition-all duration-300">
+                        <h4 className="text-yellow-200 font-medium capitalize text-sm mb-2">{t} Noise</h4>
+                        <p className="text-yellow-200/60 text-xs mb-3">{getLayerDesc(t)}</p>
+                        <div className="space-y-3">
+                          <div>
+                            <label className="block text-yellow-200/70 text-xs mb-2">Intensity: <span {...NT}>{c.intensity}%</span></label>
+                            <input type="range" min="0" max="100" value={c.intensity} onChange={(e) => setLayers(pr => ({ ...pr, [t]: { ...pr[t], intensity: parseInt(e.target.value) } }))} className="w-full h-2 bg-slate-700/50 rounded-lg appearance-none cursor-pointer accent-yellow-400" />
+                          </div>
+                          {c.intensity > 0 && (
+                            <>
+                              <div>
+                                <label className="block text-yellow-200/70 text-xs mb-2">Volume: <span {...NT}>{c.volume}%</span></label>
+                                <input type="range" min="0" max="100" value={c.volume} onChange={(e) => setLayers(pr => ({ ...pr, [t]: { ...pr[t], volume: parseInt(e.target.value) } }))} className="w-full h-2 bg-slate-700/50 rounded-lg appearance-none cursor-pointer accent-yellow-400" />
+                              </div>
+                              <div>
+                                <label className="block text-yellow-200/70 text-xs mb-2">Texture: <span {...NT}>{c.texture}%</span></label>
+                                <input type="range" min="0" max="100" value={c.texture} onChange={(e) => setLayers(pr => ({ ...pr, [t]: { ...pr[t], texture: parseInt(e.target.value) } }))} className="w-full h-2 bg-slate-700/50 rounded-lg appearance-none cursor-pointer accent-yellow-400" />
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {activeTab === 'nature' && (
+                  <div className="space-y-4">
+                    <div className="bg-gradient-to-r from-yellow-400/10 to-yellow-300/10 border-2 border-yellow-400/30 rounded-lg p-4 mb-4">
+<p className="text-yellow-200 text-xs">🌿 <strong>Nature Sounds:</strong> Add realistic nature ambience to your mix. These are your own high-quality recordings that loop seamlessly. &nbsp;·&nbsp; 🎧 Headphones bring every detail to life</p>
+                    </div>
+                    {['rain', 'storm', 'ocean', 'wind', 'fire', 'waterfall', 'river', 'nightforest', 'nightingale'].map((soundKey) => {
+                      const soundConfig = natureSounds[soundKey];
+                      const soundNames = {
+                        rain: { name: '🌧️ Rain', desc: 'Gentle rain sounds' },
+                        storm: { name: '⛈️ Thunderstorm', desc: 'Intense thunderstorm' },
+                        ocean: { name: '🌊 Ocean Waves', desc: 'Calm ocean waves with birds' },
+                        wind: { name: '💨 Wind', desc: 'Soft wind breeze' },
+                        fire: { name: '🔥 Campfire', desc: 'Crackling fire sounds' },
+                        waterfall: { name: '💧 Waterfall', desc: 'Flowing waterfall' },
+                        river: { name: '🏞️ River in Forest', desc: 'River flowing through forest' },
+                        nightforest: { name: '🌙 Night Forest', desc: 'Forest at night with insects' },
+                        nightingale: { name: '🐦 Nightingale', desc: 'Pure nightingale song in forest' }
+                      };
+                      const info = soundNames[soundKey];
+                      return (
+                        <div key={soundKey} className="bg-slate-800/50 p-4 rounded-lg border-2 border-yellow-400/20 hover:border-yellow-400/40 transition-all duration-300">
+                          <div className="flex items-center justify-between mb-2">
+                            <div>
+                              <h4 className="text-yellow-200 font-medium text-sm">{info.name}</h4>
+                              <p className="text-yellow-200/60 text-xs mt-0.5">{info.desc}</p>
+                            </div>
+                            <label className="flex items-center gap-2 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={soundConfig.enabled}
+                                onChange={(e) => handleNatureToggle(soundKey, e.target.checked)}
+                                className="w-4 h-4 accent-yellow-400"
+                              />
+                              <span className="text-yellow-200/70 text-xs">Enable</span>
+                            </label>
+                          </div>
+                          {soundConfig.enabled && (
+                            <div className="mt-3">
+                              <label className="block text-yellow-200/70 text-xs mb-1">Volume: <span {...NT}>{soundConfig.volume}%</span></label>
+                              <input type="range" min="0" max="100" value={soundConfig.volume} onChange={(e) => setNatureSounds(prev => ({ ...prev, [soundKey]: { ...prev[soundKey], volume: parseInt(e.target.value) } }))} className="w-full h-2 bg-slate-700/50 rounded-lg appearance-none cursor-pointer accent-yellow-400" />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {activeTab === 'brainwaves' && (
+                  <div className="space-y-4">
+                    <div className="bg-gradient-to-r from-yellow-400/10 to-yellow-300/10 border-2 border-yellow-400/30 rounded-lg p-4 mb-4">
+<p className="text-yellow-200 text-xs">🧠 <strong>Brainwave Entrainment:</strong> Binaural beats that guide your brain into specific states. Each frequency targets different mental states for optimal results. &nbsp;·&nbsp; 🎧 Headphones enhance the binaural effect</p>
+                    </div>
+                    {Object.entries(brainwaves).map(([t, c]) => (
+                      <div key={t} className="bg-slate-800/50 p-4 rounded-lg border-2 border-yellow-400/20 hover:border-yellow-400/40 transition-all duration-300">
+                        <div className="flex items-center justify-between mb-2">
+                          <label className="text-yellow-200 font-medium capitalize flex items-center gap-2 text-sm cursor-pointer">
+                            <input type="checkbox" checked={c.enabled} onChange={(e) => setBrainwaves(pr => ({ ...pr, [t]: { ...pr[t], enabled: e.target.checked } }))} className="w-4 h-4 accent-yellow-400" />
+                            {t} Wave
+                          </label>
+                        </div>
+                        <p className="text-yellow-200/60 text-xs mb-3">{getBrainDesc(t)}</p>
+                        {c.enabled && (
+                          <div className="space-y-3">
+                            <div>
+                              <label className="block text-xs text-yellow-200/70 mb-2">Carrier Frequency: <span {...NT}>{c.carrier} Hz</span></label>
+                              <input type="range" min="100" max="400" value={c.carrier} onChange={(e) => setBrainwaves(pr => ({ ...pr, [t]: { ...pr[t], carrier: parseInt(e.target.value) } }))} className="w-full h-2 bg-slate-700/50 rounded-lg appearance-none cursor-pointer accent-yellow-400" />
+                            </div>
+                            <div>
+                              <label className="block text-xs text-yellow-200/70 mb-2">Beat Frequency: <span {...NT}>{c.beat} Hz</span></label>
+                              <input type="range" min="1" max="40" value={c.beat} onChange={(e) => setBrainwaves(pr => ({ ...pr, [t]: { ...pr[t], beat: parseInt(e.target.value) } }))} className="w-full h-2 bg-slate-700/50 rounded-lg appearance-none cursor-pointer accent-yellow-400" />
+                            </div>
+                            <div>
+                              <label className="block text-xs text-yellow-200/70 mb-2">Wave Intensity: <span {...NT}>{c.intensity}%</span></label>
+                              <input type="range" min="0" max="100" value={c.intensity} onChange={(e) => setBrainwaves(pr => ({ ...pr, [t]: { ...pr[t], intensity: parseInt(e.target.value) } }))} className="w-full h-2 bg-slate-700/50 rounded-lg appearance-none cursor-pointer accent-yellow-400" />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {activeTab === 'export' && (
+                  <div className="space-y-4">
+                    <div className="bg-slate-800/50 p-5 rounded-lg border-2 border-yellow-400/20">
+                      <label className="block text-yellow-200 font-medium text-sm mb-3">Quality</label>
+                      <select value={exportConfig.format} onChange={(e) => setExportConfig(pr => ({ ...pr, format: e.target.value }))} className="w-full bg-slate-900 text-yellow-200 px-4 py-3 rounded-lg text-sm border-2 border-yellow-400/30 focus:border-yellow-400">
+                        <option value="wav24_44">WAV 24-bit / 44.1kHz</option>
+<option value="wav24_48">WAV 24-bit / 48kHz</option>
+                        <option value="mp3_320">MP3 / 320 kbps</option>
+                        <option value="mp3_256">MP3 / 256 kbps</option>
+                        <option value="mp3_192">MP3 / 192 kbps</option>
+                        <option value="mp3_160">MP3 / 160 kbps</option>
+                        <option value="mp3_128">MP3 / 128 kbps</option>
+                      </select>
+                    </div>
+                    <div className="bg-slate-800/50 p-5 rounded-lg border-2 border-yellow-400/20">
+                      <label className="block text-yellow-200 font-medium text-sm mb-3">Duration</label>
+                      <ExportDurationButtons format={exportConfig.format} />
+                      <div>
+                        <label className="block text-yellow-200/70 text-xs mb-2">Custom (seconds): <span {...NT}>{exportConfig.duration}</span></label>
+                        <input type="number" value={exportConfig.duration} onChange={(e) => setExportConfig(pr => ({ ...pr, duration: parseInt(e.target.value) || 60 }))} className="w-full bg-slate-900 text-yellow-200 px-4 py-3 rounded-lg text-sm border-2 border-yellow-400/30 focus:border-yellow-400" min="10" max="28800" />
+                        <p className="text-xs text-yellow-200/60 mt-2">Range: <span {...NT}>10</span> seconds to <span {...NT}>8</span> hours</p>
+                      </div>
+                    </div>
+                    {Notification.permission !== 'granted' && (
+                      <button onClick={requestNotificationPermission} className="w-full bg-gradient-to-r from-slate-800 to-slate-700 text-white px-5 py-3 rounded-lg font-semibold transition-all duration-300 hover:from-yellow-400 hover:to-yellow-300 hover:text-black border-2 border-yellow-400/30 hover:border-yellow-500 flex items-center justify-center gap-2 text-sm shadow-md">
+                        🔔 Enable notifications (recommended for long exports)
+                      </button>
+                    )}
+                    {notificationsEnabled && (
+                      <div className="bg-green-500/10 border-2 border-green-400/30 rounded-lg p-4">
+                        <p className="text-green-200 text-xs text-center">✅ Notifications enabled - You'll be notified when export completes</p>
+                      </div>
+                    )}
+                    <button onClick={expSound} disabled={isGenerating} className="w-full bg-gradient-to-r from-yellow-400 to-yellow-300 hover:from-yellow-300 hover:to-yellow-200 text-black px-6 py-4 rounded-xl font-bold transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3 border-2 border-yellow-500/50 shadow-lg hover:shadow-yellow-400/50 text-lg">
+                      {isGenerating ? (<><div className="w-5 h-5 border-2 border-black/30 border-t-black rounded-full animate-spin" />Exporting...</>) : (<><Download className="w-6 h-6" />Export</>)}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* ===================== EXPORT PROGRESS ===================== */}
+          {(exportProgress.stage !== '' || exportProgress.percentage === 100) && (
+            <ExportProgressBar exportProgress={exportProgress} formatTime={formatTime} NT={NT} />
+          )}
+          {/* ===================== END EXPORT PROGRESS ===================== */}
+
+          {/* PLAY/STOP BUTTON */}
+          <div className="p-6 border-t border-yellow-400/20 bg-gradient-to-t from-slate-950/50 to-slate-900/50">
+            <button
+              onClick={play}
+              disabled={isGenerating || isTransitioning}
+              className={`w-full py-4 px-4 rounded-xl font-bold transition-all duration-300 flex items-center justify-center gap-3 text-lg border-2 shadow-lg ${
+                isPlaying
+                  ? 'bg-gradient-to-r from-red-600 to-red-500 hover:from-red-700 hover:to-red-600 text-white border-red-500/50 shadow-red-500/30'
+                  : 'bg-gradient-to-r from-yellow-400 to-yellow-300 hover:from-yellow-300 hover:to-yellow-200 text-black border-yellow-500/50 shadow-yellow-400/50'
+              } disabled:opacity-50 disabled:cursor-not-allowed`}
+            >
+              {isGenerating ? (<><div className="w-5 h-5 border-2 border-black/30 border-t-black rounded-full animate-spin" />Preparing...</>) : isPlaying ? (<><Square className="w-6 h-6" />Stop</>) : (<><Play className="w-6 h-6" />Play</>)}
+            </button>
+            {!simpleMode && (
+              <div className="mt-3 text-xs text-yellow-200/60 text-center">✨ All changes update in real-time while playing</div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default AdvancedSoundEngine;
