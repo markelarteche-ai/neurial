@@ -1543,7 +1543,7 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
                   }}>
                     NEURIAL
                   </h1>
-                  <Waves style={{ width: '32px', height: '32px', color: '#fde047', animation: 'pulse 2s ease-in-out infinite', flexShrink: 0 }} />
+                  <Waves style={{ width: '30px', height: '30px', color: '#fde047', animation: 'pulse 2s ease-in-out infinite', flexShrink: 0 }} />
                 </div>
                 <p style={{ fontSize: '14px', color: 'rgba(254,240,138,0.8)', margin: 0 }}>✨ Professional 3D audio with crystal-clear quality</p>
               </div>
@@ -1551,10 +1551,8 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
               {/* RIGHT: PRO/Upgrade + sign out */}
               {isPro ? (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <div style={{ textAlign: 'right' }}>
-                    <p style={{ fontSize: '12px', fontWeight: 700, color: '#facc15', margin: '0 0 2px 0' }}>⚡ PRO</p>
-                    {user?.email && <p style={{ fontSize: '12px', color: '#94a3b8', maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', margin: 0 }}>{user.email}</p>}
-                  </div>
+                  {user?.email && <p style={{ fontSize: '12px', color: '#94a3b8', maxWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', margin: 0 }}>{user.email}</p>}
+                  <p style={{ fontSize: '12px', fontWeight: 700, color: '#facc15', margin: 0, whiteSpace: 'nowrap' }}>⚡ PRO</p>
                   {onSignOut && (
                     <button onClick={onSignOut} style={{ padding: '6px 12px', borderRadius: '8px', fontSize: '12px', color: '#94a3b8', border: '1px solid #475569', background: 'transparent', cursor: 'pointer' }}>
                       Sign out
