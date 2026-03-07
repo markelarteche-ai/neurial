@@ -49,7 +49,7 @@ export const AuthProvider = ({ children }) => {
   const signIn = (email) =>
     supabase.auth.signInWithOtp({
       email,
-      options: { emailRedirectTo: window.location.origin }
+      options: { emailRedirectTo: "https://neurial.dev" }
     });
 
   const signOut = () => supabase.auth.signOut();
