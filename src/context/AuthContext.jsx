@@ -35,16 +35,23 @@ export const AuthProvider = ({ children }) => {
   };
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+
+  const initSession = async () => {
+    const { data } = await supabase.auth.getSession();
+    checkSession(data.session);
+  };
+
+  initSession();
+
+  const { data: { subscription } } = supabase.auth.onAuthStateChange(
+    (_event, session) => {
       checkSession(session);
-    });
+    }
+  );
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, session) => checkSession(session)
-    );
+  return () => subscription.unsubscribe();
 
-    return () => subscription.unsubscribe();
-  }, []);
+}, []);
 
   const signIn = (email) =>
     supabase.auth.signInWithOtp({
