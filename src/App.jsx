@@ -155,7 +155,6 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
   const ADMIN_EMAILS = ['markelarteche@gmail.com'];
   const isAdmin = user?.email && ADMIN_EMAILS.includes(user.email);
 
-  // ── 2️⃣ Server-side subscription check ──────────────────────────────────
   const [serverIsPro, setServerIsPro] = useState(isPropPro);
   useEffect(() => {
     if (isAdmin) { setServerIsPro(true); return; }
@@ -180,13 +179,10 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
     checkSub();
   }, [user, isAdmin]);
 
-  // ── 1️⃣ Stripe redirect: check ?upgraded=true in URL ────────────────────
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('upgraded') === 'true') {
-      // Remove param from URL without reload
       window.history.replaceState({}, '', window.location.pathname);
-      // Re-check subscription immediately
       if (!isAdmin && user) {
         const recheckSub = async () => {
           try {
@@ -214,20 +210,17 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
   const isLimited = !isPro;
 
   const [showLimitModal, setShowLimitModal] = useState(false);
-  const [isFadingOut, setIsFadingOut] = useState(false); // 3️⃣ fade state
+  const [isFadingOut, setIsFadingOut] = useState(false);
   const limitTimerRef = useRef(null);
   const accumulatedTimeRef = useRef(0);
   const sessionStartRef = useRef(null);
 
-  // Reset body/html margins so component fills full screen
   useEffect(() => {
-    // Directly set styles on root elements
     document.documentElement.style.cssText = 'margin:0;padding:0;width:100%;';
     document.body.style.cssText = 'margin:0;padding:0;width:100%;min-height:100vh;overflow-x:hidden;';
     const root = document.getElementById('root');
     if (root) root.style.cssText = 'margin:0;padding:0;width:100%;min-height:100vh;';
 
-    // Also inject a style tag as backup
     const style = document.createElement('style');
     style.id = 'neurial-reset';
     style.textContent = `
@@ -244,7 +237,7 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
   }, []);
 
   const FREE_LIMIT_MS = 600000;
-  const FADE_WARNING_MS = 30000; // 30s before end, start fading
+  const FADE_WARNING_MS = 30000;
 
   const startLimitTimer = () => {
     if (!isLimited) return;
@@ -254,7 +247,6 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
       const elapsed = accumulatedTimeRef.current + (Date.now() - sessionStartRef.current);
       const remaining = FREE_LIMIT_MS - elapsed;
 
-      // ── 3️⃣ Start gentle fade 30s before end ──
       if (remaining <= FADE_WARNING_MS && remaining > 0) {
         setIsFadingOut(true);
         const ctx = audioContextRef.current;
@@ -268,7 +260,6 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
         }
       }
 
-      // ── End of session ──
       if (elapsed >= FREE_LIMIT_MS) {
         clearInterval(limitTimerRef.current);
         setIsFadingOut(false);
@@ -334,11 +325,11 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
   });
 
   const [notificationsEnabled, setNotificationsEnabled] = useState(
-    Notification.permission === 'granted'
+    typeof Notification !== 'undefined' && Notification.permission === 'granted'
   );
 
   const requestNotificationPermission = async () => {
-    if (Notification.permission === 'default') {
+    if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
       const permission = await Notification.requestPermission();
       setNotificationsEnabled(permission === 'granted');
     }
@@ -1169,7 +1160,7 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
     const totalElapsedSeconds = Math.floor((Date.now() - startTime) / 1000);
     setExportProgress({ isExporting: false, currentChunk: numChunks, totalChunks: numChunks, percentage: 100, elapsedTime: totalElapsedSeconds, estimatedTimeLeft: 0, stage: 'complete' });
 
-    if (notificationsEnabled && Notification.permission === 'granted') {
+    if (notificationsEnabled && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
       new Notification('🎵 Export Complete!', { body: `Your ${formatTime(totalDuration)} audio file is ready!\nFile: ${filename}`, icon: '/favicon.ico', tag: 'export-complete' });
     }
     setTimeout(() => { alert(`✅ Export complete!\n\nFile: ${filename}\nDuration: ${totalDuration}s\nChunks: ${numChunks}\nTime: ${totalElapsedSeconds}s`); }, 100);
@@ -1425,14 +1416,13 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
     const estimate = getEstimateForDuration(exportConfig.duration, format);
     return (
       <div>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-          <span style={{ color: '#fef08a', fontWeight: 500, fontSize: '14px' }}>Duration</span>
-          {estimate && (
-            <span style={{ color: '#fde047', fontWeight: 600, fontSize: '14px', fontVariantNumeric: 'tabular-nums' }}>
+        {estimate && (
+          <div style={{ textAlign: 'left', marginBottom: '8px' }}>
+            <span style={{ color: '#fde047', fontWeight: 600, fontSize: '13px', fontVariantNumeric: 'tabular-nums' }}>
               {estimate} approx
             </span>
-          )}
-        </div>
+          </div>
+        )}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px', marginBottom: '16px' }}>
           {quickDurations.map((option) => (
             <button
@@ -1534,26 +1524,31 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
           <div style={{
             padding: '24px 32px',
             borderBottom: '1px solid rgba(250,204,21,0.2)',
-            background: 'linear-gradient(to right,rgba(15,23,42,0.5),rgba(30,41,59,0.5))'
+            background: 'linear-gradient(to right,rgba(15,23,42,0.5),rgba(30,41,59,0.5))',
+            textAlign: 'left'
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div>
-                <h1 style={{
-                  fontSize: '30px',
-                  fontWeight: 700,
-                  marginBottom: '4px',
-                  margin: '0 0 4px 0',
-                  background: 'linear-gradient(to right,#fef9c3,#fde047,#facc15)',
-                  WebkitBackgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
-                  backgroundClip: 'text',
-                  animation: 'neurialWaveMotion 4s ease-in-out infinite'
-                }}>
-                  NEURIAL
-                </h1>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', textAlign: 'left' }}>
+              {/* LEFT: NEURIAL title + Waves icon + subtitle */}
+              <div style={{ textAlign: 'left' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px' }}>
+                  <h1 style={{
+                    fontSize: '30px',
+                    fontWeight: 700,
+                    margin: 0,
+                    background: 'linear-gradient(to right,#fef9c3,#fde047,#facc15)',
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent',
+                    backgroundClip: 'text',
+                    animation: 'neurialWaveMotion 4s ease-in-out infinite'
+                  }}>
+                    NEURIAL
+                  </h1>
+                  <Waves style={{ width: '32px', height: '32px', color: '#fde047', animation: 'pulse 2s ease-in-out infinite', flexShrink: 0 }} />
+                </div>
                 <p style={{ fontSize: '14px', color: 'rgba(254,240,138,0.8)', margin: 0 }}>✨ Professional 3D audio with crystal-clear quality</p>
               </div>
 
+              {/* RIGHT: PRO/Upgrade + sign out */}
               {isPro ? (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                   <div style={{ textAlign: 'right' }}>
@@ -1565,7 +1560,6 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
                       Sign out
                     </button>
                   )}
-                  <Waves style={{ width: '48px', height: '48px', color: '#fde047', animation: 'pulse 2s ease-in-out infinite' }} />
                 </div>
               ) : (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -1581,7 +1575,6 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
                       Sign out
                     </button>
                   )}
-                  <Waves style={{ width: '48px', height: '48px', color: '#fde047', animation: 'pulse 2s ease-in-out infinite' }} />
                 </div>
               )}
             </div>
@@ -1822,7 +1815,7 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
                   ) : (
                     <>
                       <div style={{ padding: '20px', borderRadius: '8px', background: 'rgba(30,41,59,0.5)', border: '2px solid rgba(250,204,21,0.2)' }}>
-                        <label style={{ display: 'block', color: '#fef08a', fontWeight: 500, fontSize: '14px', marginBottom: '12px' }}>Quality</label>
+                        <label style={{ display: 'block', color: '#fef08a', fontWeight: 500, fontSize: '14px', marginBottom: '12px', textAlign: 'left' }}>Quality</label>
                         <select
                           value={exportConfig.format}
                           onChange={(e) => setExportConfig(pr => ({ ...pr, format: e.target.value }))}
@@ -1838,10 +1831,10 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
                         </select>
                       </div>
                       <div style={{ padding: '20px', borderRadius: '8px', background: 'rgba(30,41,59,0.5)', border: '2px solid rgba(250,204,21,0.2)' }}>
-                        <label style={{ display: 'block', color: '#fef08a', fontWeight: 500, fontSize: '14px', marginBottom: '12px' }}>Duration</label>
+                        <label style={{ display: 'block', color: '#fef08a', fontWeight: 500, fontSize: '14px', marginBottom: '12px', textAlign: 'left' }}>Duration</label>
                         <ExportDurationButtons format={exportConfig.format} />
                         <div>
-                          <label style={{ display: 'block', fontSize: '12px', marginBottom: '8px', color: 'rgba(254,240,138,0.7)' }}>Custom (seconds): <span {...NT}>{exportConfig.duration}</span></label>
+                          <label style={{ display: 'block', fontSize: '12px', marginBottom: '8px', color: 'rgba(254,240,138,0.7)', textAlign: 'left' }}>Custom (seconds): <span {...NT}>{exportConfig.duration}</span></label>
                           <input
                             type="number"
                             value={exportConfig.duration}
@@ -1849,10 +1842,10 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
                             style={{ width: '100%', padding: '12px 16px', borderRadius: '8px', fontSize: '14px', background: '#0f172a', color: '#fef9c3', border: '2px solid rgba(250,204,21,0.3)', outline: 'none', boxSizing: 'border-box' }}
                             min="10" max="28800"
                           />
-                          <p style={{ fontSize: '12px', marginTop: '8px', color: 'rgba(254,240,138,0.6)', margin: '8px 0 0 0' }}>Range: <span {...NT}>10</span> seconds to <span {...NT}>8</span> hours</p>
+                          <p style={{ fontSize: '12px', marginTop: '8px', color: 'rgba(254,240,138,0.6)', margin: '8px 0 0 0', textAlign: 'left' }}>Range: <span {...NT}>10</span> seconds to <span {...NT}>8</span> hours</p>
                         </div>
                       </div>
-                      {Notification.permission !== 'granted' && (
+                      {typeof Notification !== 'undefined' && Notification.permission !== 'granted' && (
                         <button onClick={requestNotificationPermission} style={{ width: '100%', padding: '12px 20px', borderRadius: '8px', fontWeight: 600, fontSize: '14px', background: 'linear-gradient(to right,#1e293b,#0f172a)', color: '#fff', border: '2px solid rgba(250,204,21,0.3)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', transition: 'all 0.3s', boxSizing: 'border-box' }}>
                           🔔 Enable notifications (recommended for long exports)
                         </button>
