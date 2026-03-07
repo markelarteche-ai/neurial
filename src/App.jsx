@@ -1,8 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Play, Square, Download, Waves } from 'lucide-react';
 
-
-
 // ===================== EXPORT PROGRESS BAR =====================
 const ExportProgressBar = ({ exportProgress, formatTime, NT }) => {
   const [localElapsed, setLocalElapsed] = React.useState(0);
@@ -34,35 +32,41 @@ const ExportProgressBar = ({ exportProgress, formatTime, NT }) => {
     ? exportProgress.elapsedTime : localElapsed;
 
   return (
-    <div className="mx-6 mb-6 rounded-2xl overflow-hidden border border-yellow-400/25 bg-slate-900/80 shadow-xl shadow-black/40">
+    <div style={{
+      margin: '0 32px 24px 32px',
+      borderRadius: '16px',
+      overflow: 'hidden',
+      border: '1px solid rgba(250,204,21,0.25)',
+      background: 'rgba(15,23,42,0.8)',
+      boxShadow: '0 20px 25px rgba(0,0,0,0.4)'
+    }}>
       <style>{`
         @keyframes xp-sweep {
           0%   { transform: translateX(-100%); }
           100% { transform: translateX(400%); }
         }
         @keyframes xp-dot { 0%,100%{opacity:1} 50%{opacity:0.2} }
-        @keyframes xp-fill {
-          0%   { width: 0%; }
-          100% { width: 100%; }
-        }
       `}</style>
 
       {/* Top accent */}
-      <div className="h-0.5 w-full" style={{
+      <div style={{
+        height: '2px',
+        width: '100%',
         background: isComplete
           ? 'linear-gradient(90deg,#166534,#4ade80,#166534)'
           : 'linear-gradient(90deg,#92400e,#facc15,#fef08a,#facc15,#92400e)',
       }} />
 
-      <div className="p-5 space-y-4">
+      <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
         {/* Header */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full flex-shrink-0" style={{
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{
+              width: '8px', height: '8px', borderRadius: '50%', flexShrink: 0, display: 'inline-block',
               backgroundColor: isComplete ? '#4ade80' : '#facc15',
               animation: isComplete ? 'none' : 'xp-dot 1.2s ease-in-out infinite',
             }} />
-            <span className="text-yellow-200 font-semibold text-sm tracking-wide">
+            <span style={{ color: '#fef08a', fontWeight: 600, fontSize: '14px', letterSpacing: '0.05em' }}>
               {exportProgress.stage === 'loading nature sounds' && '🌿 Loading nature sounds…'}
               {exportProgress.stage === 'rendering'             && '🎵 Rendering audio…'}
               {exportProgress.stage === 'complete'              && '✅ Export complete!'}
@@ -70,26 +74,27 @@ const ExportProgressBar = ({ exportProgress, formatTime, NT }) => {
             </span>
           </div>
           {isComplete && (
-            <span className="font-bold tabular-nums" style={{
-              fontSize: '1.75rem', lineHeight: 1, color: '#4ade80',
-            }} {...NT}>100%</span>
+            <span style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', fontSize: '1.75rem', lineHeight: 1, color: '#4ade80' }} {...NT}>100%</span>
           )}
         </div>
 
         {/* Bar */}
-        <div className="relative h-5 w-full rounded-full overflow-hidden bg-slate-800 border border-slate-700/60 shadow-inner">
+        <div style={{ position: 'relative', height: '20px', width: '100%', borderRadius: '9999px', overflow: 'hidden', background: '#1e293b', border: '1px solid rgba(71,85,105,0.6)' }}>
           {isComplete ? (
-            <div className="absolute inset-y-0 left-0 right-0 rounded-full" style={{
+            <div style={{
+              position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, borderRadius: '9999px',
               background: 'linear-gradient(90deg,#166534,#4ade80)',
               boxShadow: '0 0 16px rgba(74,222,128,0.5)',
             }} />
           ) : (
             <>
-              <div className="absolute inset-y-0 left-0 right-0 rounded-full" style={{
+              <div style={{
+                position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, borderRadius: '9999px',
                 background: 'linear-gradient(90deg,#92400e,#d97706)',
                 opacity: 0.35,
               }} />
-              <div className="absolute inset-y-0 rounded-full" style={{
+              <div style={{
+                position: 'absolute', top: 0, bottom: 0, borderRadius: '9999px',
                 width: '45%',
                 background: 'linear-gradient(90deg,transparent,#facc15,#fef08a,#facc15,transparent)',
                 animation: 'xp-sweep 1.6s ease-in-out infinite',
@@ -98,40 +103,44 @@ const ExportProgressBar = ({ exportProgress, formatTime, NT }) => {
             </>
           )}
           {isComplete && (
-            <span className="absolute inset-0 flex items-center justify-center text-xs font-bold"
-              style={{ color: 'rgba(0,0,0,0.55)' }} {...NT}>100%</span>
+            <span style={{
+              position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: '12px', fontWeight: 700, color: 'rgba(0,0,0,0.55)'
+            }} {...NT}>100%</span>
           )}
         </div>
 
         {/* Cards */}
-        <div className="grid grid-cols-2 gap-3">
-          <div className="bg-slate-800/70 rounded-xl p-3 border border-slate-700/50 flex flex-col gap-1">
-            <span className="text-yellow-200/40 uppercase tracking-widest" style={{fontSize:'9px'}}>Chunk</span>
-            <span className="text-yellow-100 font-bold tabular-nums" style={{fontSize:'1.05rem',lineHeight:1.2}} {...NT}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+          <div style={{ borderRadius: '12px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '4px', background: 'rgba(30,41,59,0.7)', border: '1px solid rgba(71,85,105,0.5)' }}>
+            <span style={{ color: '#fef08a', textTransform: 'uppercase', letterSpacing: '0.1em', fontSize: '9px', opacity: 0.4 }}>Chunk</span>
+            <span style={{ color: '#fef9c3', fontWeight: 700, fontVariantNumeric: 'tabular-nums', fontSize: '1.05rem', lineHeight: 1.2 }} {...NT}>
               {exportProgress.currentChunk}
-              <span className="text-yellow-200/30 font-normal text-xs"> / {exportProgress.totalChunks}</span>
+              <span style={{ fontWeight: 400, fontSize: '12px', color: 'rgba(254,240,138,0.3)' }}> / {exportProgress.totalChunks}</span>
             </span>
           </div>
-          <div className="bg-slate-800/70 rounded-xl p-3 border border-slate-700/50 flex flex-col gap-1">
-            <span className="text-yellow-200/40 uppercase tracking-widest" style={{fontSize:'9px'}}>Elapsed</span>
-            <span className="text-yellow-100 font-bold tabular-nums" style={{fontSize:'1.05rem',lineHeight:1.2}} {...NT}>
+          <div style={{ borderRadius: '12px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '4px', background: 'rgba(30,41,59,0.7)', border: '1px solid rgba(71,85,105,0.5)' }}>
+            <span style={{ color: '#fef08a', textTransform: 'uppercase', letterSpacing: '0.1em', fontSize: '9px', opacity: 0.4 }}>Elapsed</span>
+            <span style={{ color: '#fef9c3', fontWeight: 700, fontVariantNumeric: 'tabular-nums', fontSize: '1.05rem', lineHeight: 1.2 }} {...NT}>
               {formatTime(displayElapsed)}
             </span>
           </div>
         </div>
 
         {!isComplete && (
-          <div className="flex items-center gap-2 rounded-lg px-3 py-2 border" style={{
-            background:'rgba(234,179,8,0.05)', borderColor:'rgba(234,179,8,0.18)',
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: '8px', borderRadius: '8px', padding: '8px 12px',
+            background: 'rgba(234,179,8,0.05)', border: '1px solid rgba(234,179,8,0.18)',
           }}>
-            <span style={{fontSize:'0.85rem'}}>⚠️</span>
-            <p className="text-yellow-200/55 text-xs">Keep this tab open until the export finishes</p>
+            <span style={{ fontSize: '0.85rem' }}>⚠️</span>
+            <p style={{ fontSize: '12px', color: 'rgba(254,240,138,0.55)', margin: 0 }}>Keep this tab open until the export finishes</p>
           </div>
         )}
       </div>
 
       {/* Bottom accent */}
-      <div className="h-0.5 w-full opacity-50" style={{
+      <div style={{
+        height: '2px', width: '100%', opacity: 0.5,
         background: isComplete
           ? 'linear-gradient(90deg,#166534,#4ade80,#166534)'
           : 'linear-gradient(90deg,#92400e,#facc15,#fef08a,#facc15,#92400e)',
@@ -140,18 +149,180 @@ const ExportProgressBar = ({ exportProgress, formatTime, NT }) => {
   );
 };
 
-const AdvancedSoundEngine = () => {
+// ===================== MAIN COMPONENT =====================
+const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut = null }) => {
 
-  // ================= STATE =================
+  const ADMIN_EMAILS = ['markelarteche@gmail.com'];
+  const isAdmin = user?.email && ADMIN_EMAILS.includes(user.email);
+
+  // ── 2️⃣ Server-side subscription check ──────────────────────────────────
+  const [serverIsPro, setServerIsPro] = useState(isPropPro);
+  useEffect(() => {
+    if (isAdmin) { setServerIsPro(true); return; }
+    if (!user) return;
+    const checkSub = async () => {
+      try {
+        const { createClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm');
+        const supabase = createClient(
+          import.meta.env.VITE_SUPABASE_URL,
+          import.meta.env.VITE_SUPABASE_ANON_KEY
+        );
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) return;
+        const res = await fetch('/api/subscription-status', {
+          headers: { Authorization: `Bearer ${session.access_token}` }
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        setServerIsPro(data.isPro ?? false);
+      } catch {}
+    };
+    checkSub();
+  }, [user, isAdmin]);
+
+  // ── 1️⃣ Stripe redirect: check ?upgraded=true in URL ────────────────────
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('upgraded') === 'true') {
+      // Remove param from URL without reload
+      window.history.replaceState({}, '', window.location.pathname);
+      // Re-check subscription immediately
+      if (!isAdmin && user) {
+        const recheckSub = async () => {
+          try {
+            const { createClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm');
+            const supabase = createClient(
+              import.meta.env.VITE_SUPABASE_URL,
+              import.meta.env.VITE_SUPABASE_ANON_KEY
+            );
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) return;
+            const res = await fetch('/api/subscription-status', {
+              headers: { Authorization: `Bearer ${session.access_token}` }
+            });
+            if (!res.ok) return;
+            const data = await res.json();
+            setServerIsPro(data.isPro ?? false);
+          } catch {}
+        };
+        recheckSub();
+      }
+    }
+  }, []);
+
+  const isPro = serverIsPro || isAdmin;
+  const isLimited = !isPro;
+
+  const [showLimitModal, setShowLimitModal] = useState(false);
+  const [isFadingOut, setIsFadingOut] = useState(false); // 3️⃣ fade state
+  const limitTimerRef = useRef(null);
+  const accumulatedTimeRef = useRef(0);
+  const sessionStartRef = useRef(null);
+
+  // Reset body/html margins so component fills full screen
+  useEffect(() => {
+    // Directly set styles on root elements
+    document.documentElement.style.cssText = 'margin:0;padding:0;width:100%;';
+    document.body.style.cssText = 'margin:0;padding:0;width:100%;min-height:100vh;overflow-x:hidden;';
+    const root = document.getElementById('root');
+    if (root) root.style.cssText = 'margin:0;padding:0;width:100%;min-height:100vh;';
+
+    // Also inject a style tag as backup
+    const style = document.createElement('style');
+    style.id = 'neurial-reset';
+    style.textContent = `
+      *, *::before, *::after { box-sizing: border-box !important; }
+      html { margin: 0 !important; padding: 0 !important; width: 100% !important; }
+      body { margin: 0 !important; padding: 0 !important; width: 100% !important; min-height: 100vh !important; overflow-x: hidden !important; }
+      #root { margin: 0 !important; padding: 0 !important; width: 100% !important; min-height: 100vh !important; display: block !important; max-width: none !important; }
+    `;
+    document.head.appendChild(style);
+    return () => {
+      const el = document.getElementById('neurial-reset');
+      if (el) el.remove();
+    };
+  }, []);
+
+  const FREE_LIMIT_MS = 600000;
+  const FADE_WARNING_MS = 30000; // 30s before end, start fading
+
+  const startLimitTimer = () => {
+    if (!isLimited) return;
+    clearInterval(limitTimerRef.current);
+    sessionStartRef.current = Date.now();
+    limitTimerRef.current = setInterval(() => {
+      const elapsed = accumulatedTimeRef.current + (Date.now() - sessionStartRef.current);
+      const remaining = FREE_LIMIT_MS - elapsed;
+
+      // ── 3️⃣ Start gentle fade 30s before end ──
+      if (remaining <= FADE_WARNING_MS && remaining > 0) {
+        setIsFadingOut(true);
+        const ctx = audioContextRef.current;
+        const gain = gainNodeRef.current;
+        if (gain && ctx && ctx.state === 'running') {
+          try {
+            const fadeProgress = 1 - (remaining / FADE_WARNING_MS);
+            const targetGain = Math.max(0.05, 1 - fadeProgress * 0.95);
+            gain.gain.setTargetAtTime(targetGain, ctx.currentTime, 0.5);
+          } catch {}
+        }
+      }
+
+      // ── End of session ──
+      if (elapsed >= FREE_LIMIT_MS) {
+        clearInterval(limitTimerRef.current);
+        setIsFadingOut(false);
+        isPlayingRef.current = false;
+        setIsPlaying(false);
+        killAllNatureNow();
+        const ctx = audioContextRef.current;
+        const gain = gainNodeRef.current;
+        if (gain && ctx) {
+          try {
+            gain.gain.cancelScheduledValues(ctx.currentTime);
+            gain.gain.setValueAtTime(gain.gain.value || 1, ctx.currentTime);
+            gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 1.5);
+          } catch (e) {}
+          setTimeout(async () => {
+            try { if (mixerNodeRef.current) mixerNodeRef.current.disconnect(); } catch {}
+            try { if (filterNodesRef.current.inGain) filterNodesRef.current.inGain.disconnect(); } catch {}
+            try { if (filterNodesRef.current.lpf) filterNodesRef.current.lpf.disconnect(); } catch {}
+            try { if (filterNodesRef.current.bass) filterNodesRef.current.bass.disconnect(); } catch {}
+            try { if (gain) gain.disconnect(); } catch {}
+            filterNodesRef.current = {};
+            mixerNodeRef.current = null;
+            if (ctx && ctx.state !== 'closed') { try { await ctx.close(); } catch {} }
+            audioContextRef.current = null;
+            setIsGenerating(false);
+          }, 1600);
+        }
+        accumulatedTimeRef.current = 0;
+        setShowLimitModal(true);
+      }
+    }, 500);
+  };
+
+  const pauseLimitTimer = () => {
+    if (sessionStartRef.current !== null) {
+      accumulatedTimeRef.current += Date.now() - sessionStartRef.current;
+      sessionStartRef.current = null;
+    }
+    clearInterval(limitTimerRef.current);
+    setIsFadingOut(false);
+  };
+
+  const resetLimitTimer = () => {
+    clearInterval(limitTimerRef.current);
+    accumulatedTimeRef.current = 0;
+    sessionStartRef.current = null;
+  };
+
   const [activeTab, setActiveTab] = useState('layers');
   const [isPlaying, setIsPlaying] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [simpleMode, setSimpleMode] = useState(true);
-  const [simpleView, setSimpleView] = useState('main');
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [activePreset, setActivePreset] = useState(null);
 
-  // ================= EXPORT PROGRESS STATE =================
   const [exportProgress, setExportProgress] = useState({
     isExporting: false,
     currentChunk: 0,
@@ -173,19 +344,16 @@ const AdvancedSoundEngine = () => {
     }
   };
 
-  // ================= AUDIO REFS =================
   const audioContextRef = useRef(null);
   const isApplyingPresetRef = useRef(false);
   const mixerNodeRef = useRef(null);
   const gainNodeRef = useRef(null);
   const filterNodesRef = useRef({});
 
-  // Nature sounds — buffer-based system
   const natureAudioRefs    = useRef({});
   const natureGainNodes    = useRef({});
   const natureBufferCacheRef = useRef({});
 
-  // ================= DATA =================
   const NT = { translate: 'no', className: 'notranslate' };
 
   const [layers, setLayers] = useState({
@@ -213,7 +381,6 @@ const AdvancedSoundEngine = () => {
     temporalSmooth:0, layerInteract:0, microRandom:0
   });
 
-  // ================= NATURE SOUNDS STATE =================
   const [natureSounds, setNatureSounds] = useState({
     rain: { enabled: false, volume: 70 },
     storm: { enabled: false, volume: 70 },
@@ -226,15 +393,20 @@ const AdvancedSoundEngine = () => {
     nightingale: { enabled: false, volume: 70 }
   });
 
-  // Keep a ref mirror of natureSounds so imperative code can read current values
   const natureSoundsRef = useRef(natureSounds);
   useEffect(() => { natureSoundsRef.current = natureSounds; }, [natureSounds]);
 
-  // Keep a ref mirror of isPlaying
   const isPlayingRef = useRef(false);
   useEffect(() => { isPlayingRef.current = isPlaying; }, [isPlaying]);
 
-  // ================= NATURE SOUND URLs =================
+  useEffect(() => {
+    if (showLimitModal) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "auto";
+    }
+  }, [showLimitModal]);
+
   const NATURE_SOUND_URLS = {
     rain: '/sounds/rain2.mp3',
     ocean: '/sounds/Calm Ocean Waves With Birds.mp3',
@@ -247,7 +419,6 @@ const AdvancedSoundEngine = () => {
     nightingale: '/sounds/Pure Sound Of The Nightingale Song In The Forest.mp3'
   };
 
-  // ================= CROSSFADE CURVES =================
   const XFADE_SAMPLES = 128;
   const xfadeCurveOut = new Float32Array(XFADE_SAMPLES).map((_, i) =>
     Math.cos((i / XFADE_SAMPLES) * Math.PI * 0.5)
@@ -256,7 +427,6 @@ const AdvancedSoundEngine = () => {
     Math.sin((i / XFADE_SAMPLES) * Math.PI * 0.5)
   );
 
-  // ================= REALTIME PARAM SYNC =================
   const syncAllRealtimeParams = (ctx) => {
     const node = mixerNodeRef.current;
     if (!ctx || !node || ctx.state !== 'running') return;
@@ -311,7 +481,6 @@ const AdvancedSoundEngine = () => {
     return f;
   };
 
-  // ================= REALTIME UPDATE =================
   useEffect(() => {
     if (!isPlaying) return;
     const ctx = audioContextRef.current;
@@ -322,7 +491,6 @@ const AdvancedSoundEngine = () => {
     f.bass.gain.setTargetAtTime((processing.bass-50)/5, t, 0.02);
   }, [layers, brainwaves, processing, isPlaying]);
 
-  // ================= NATURE VOLUME SYNC =================
   useEffect(() => {
     Object.entries(natureSounds).forEach(([soundKey, cfg]) => {
       const masterGain = natureGainNodes.current[soundKey];
@@ -336,9 +504,6 @@ const AdvancedSoundEngine = () => {
     natureSounds.river.volume, natureSounds.nightforest.volume, natureSounds.nightingale.volume
   ]);
 
-  // ================= NATURE SOUND IMPERATIVE ENGINE =================
-
-  // In-flight promise cache — prevents double-fetch when same sound is toggled rapidly
   const natureLoadingRef = useRef({});
 
   const loadNatureBufferRealtime = async (ctx, soundKey) => {
@@ -346,7 +511,6 @@ const AdvancedSoundEngine = () => {
     if (natureBufferCacheRef.current[soundKey]) {
       return natureBufferCacheRef.current[soundKey];
     }
-    // If already fetching this key, wait for the same promise
     if (natureLoadingRef.current[soundKey]) {
       return natureLoadingRef.current[soundKey];
     }
@@ -366,16 +530,13 @@ const AdvancedSoundEngine = () => {
     return promise;
   };
 
-  // Start a single nature sound imperatively (no React state dependency)
   const startNatureSound = (soundKey, volume) => {
     const ctx = audioContextRef.current;
     if (!ctx || ctx.state === 'closed') return;
-    if (natureAudioRefs.current[soundKey]) return; // already running
+    if (natureAudioRefs.current[soundKey]) return;
 
-    // If context is suspended, resume it first then retry
     if (ctx.state === 'suspended') {
       ctx.resume().then(() => {
-        // Only retry if still enabled and not already started by another call
         if (!natureAudioRefs.current[soundKey] && audioContextRef.current === ctx) {
           startNatureSound(soundKey, natureSoundsRef.current[soundKey]?.volume ?? volume);
         }
@@ -463,11 +624,8 @@ const AdvancedSoundEngine = () => {
           try { masterGain.disconnect(); } catch (e) {}
           return;
         }
-        // For very long files (>300s), use a virtual 120s segment to avoid
-        // Chrome silently failing setValueCurveAtTime scheduled >minutes ahead.
         const MAX_SEGMENT = 120;
         const effectiveDuration = playDuration > MAX_SEGMENT ? MAX_SEGMENT : playDuration;
-        // Pick a random start offset within the buffer so it doesn't always begin at 0
         const maxOffset = Math.max(0, playDuration - effectiveDuration - XFADE);
         const startOffset = maxOffset > 0 ? Math.random() * maxOffset : 0;
 
@@ -547,7 +705,6 @@ const AdvancedSoundEngine = () => {
     natureGainNodes.current = {};
   };
 
-  // Preload all nature buffers silently in background (no playback, just cache)
   const preloadAllNatureBuffers = (ctx) => {
     Object.keys(NATURE_SOUND_URLS).forEach(soundKey => {
       if (!natureBufferCacheRef.current[soundKey] && !natureLoadingRef.current[soundKey]) {
@@ -556,7 +713,6 @@ const AdvancedSoundEngine = () => {
     });
   };
 
-  // Start all currently-enabled nature sounds (called after audio context is ready)
   const startAllEnabledNatureSounds = () => {
     const sounds = natureSoundsRef.current;
     Object.entries(sounds).forEach(([soundKey, cfg]) => {
@@ -566,27 +722,21 @@ const AdvancedSoundEngine = () => {
     });
   };
 
-  // ================= NATURE CHECKBOX HANDLER =================
   const handleNatureToggle = (soundKey, checked) => {
-    // Update React state
     setNatureSounds(prev => ({ ...prev, [soundKey]: { ...prev[soundKey], enabled: checked } }));
-
     if (checked) {
-      // Start if audio context exists (running or suspended — startNatureSound handles resume)
       const ctx = audioContextRef.current;
       if (ctx && ctx.state !== 'closed' && !natureAudioRefs.current[soundKey]) {
         const currentVolume = natureSoundsRef.current[soundKey]?.volume ?? 70;
         startNatureSound(soundKey, currentVolume);
       }
     } else {
-      // Stop with fade if running
       if (natureAudioRefs.current[soundKey]) {
         stopNatureSoundImperative(soundKey, false);
       }
     }
   };
 
-  // ================= PLAY =================
   const play = async () => {
     if (isTransitioning) return;
     if (isPlaying) return stopSound();
@@ -623,10 +773,9 @@ const AdvancedSoundEngine = () => {
       setIsPlaying(true);
       isPlayingRef.current = true;
 
-      // Preload all nature buffers in background so they're instant when toggled
-      preloadAllNatureBuffers(ctx);
+      if (isLimited) startLimitTimer();
 
-      // Start all enabled nature sounds immediately after context is ready
+      preloadAllNatureBuffers(ctx);
       startAllEnabledNatureSounds();
 
     } catch (err) {
@@ -637,8 +786,9 @@ const AdvancedSoundEngine = () => {
     setIsTransitioning(false);
   };
 
-  // ================= STOP =================
   const stopSound = () => {
+    pauseLimitTimer();
+
     const ctx = audioContextRef.current;
     const gain = gainNodeRef.current;
 
@@ -667,7 +817,6 @@ const AdvancedSoundEngine = () => {
       gain.gain.linearRampToValueAtTime(0, now + fadeTime);
     } catch (e) {}
 
-    // Kill all nature sounds immediately on stop
     killAllNatureNow();
 
     setTimeout(async () => {
@@ -698,7 +847,6 @@ const AdvancedSoundEngine = () => {
     }, fadeTime * 1000 + 500);
   };
 
-  // ================= EXPORT CONFIG =================
   const [exportConfig, setExportConfig] = useState({
     format: 'wav24_48',
     duration: 60
@@ -715,51 +863,24 @@ const AdvancedSoundEngine = () => {
     { label: '8 hours', seconds: 28800 }
   ];
 
-  // ================= EXPORT TIME ESTIMATES =================
-const exportTimeEstimates = {
-  60:    { wav: '~15s',    mp3: '~30s' },
-  300:   { wav: '~45s',    mp3: '~2min' },
-  600:   { wav: '~1m30s',  mp3: '~3min' },
-  1800:  { wav: '~4min',   mp3: '~10min' },
-  3600:  { wav: '~9min',   mp3: '~20min' },
-  7200:  { wav: '~18min',  mp3: '~40min' },
-  14400: { wav: '~36min',  mp3: '~1h20m' },
-  28800: { wav: '~1h12m',  mp3: '~2h30m' },
-};
-
-const isWavFormat = (fmt) => fmt === 'wav24_44' || fmt === 'wav24_48';
-
-const getEstimateForDuration = (seconds, fmt) => {
-  const est = exportTimeEstimates[seconds];
-  if (!est) return null;
-  return isWavFormat(fmt) ? est.wav : est.mp3;
-};
-
-  // ================= SIMPLE MODE RULES =================
-  const SIMPLE_ALLOWED_LAYERS = ['white', 'pink', 'brown'];
-  const SIMPLE_ALLOWED_WAVES = ['alpha'];
-
-  const SIMPLE_PRESET_KEYS = ['DeepSleep', 'CalmMind', 'DeepFocus', 'ADHDSupport'];
-  const ADVANCED_PRESET_KEYS = ['DeepSleep', 'DeepSpace', 'CalmMind', 'MentalReset', 'DeepFocus', 'TinnitusMasking', 'ADHDSupport', 'MeditationFlow'];
-
-  const sanitizeLayersForSimple = (layersObj) => {
-    const out = { ...layersObj };
-    Object.keys(out).forEach((k) => {
-      if (!SIMPLE_ALLOWED_LAYERS.includes(k)) out[k] = { ...out[k], intensity: 0 };
-    });
-    return out;
+  const exportTimeEstimates = {
+    60:    { wav: '~15s',    mp3: '~30s' },
+    300:   { wav: '~45s',    mp3: '~2min' },
+    600:   { wav: '~1m30s',  mp3: '~3min' },
+    1800:  { wav: '~4min',   mp3: '~10min' },
+    3600:  { wav: '~9min',   mp3: '~20min' },
+    7200:  { wav: '~18min',  mp3: '~40min' },
+    14400: { wav: '~36min',  mp3: '~1h20m' },
+    28800: { wav: '~1h12m',  mp3: '~2h30m' },
   };
 
-  const sanitizeBrainwavesForSimple = (wavesObj) => {
-    const out = { ...wavesObj };
-    const activeWave = Object.entries(out).find(([_, v]) => v?.enabled === true)?.[0];
-    Object.keys(out).forEach((k) => {
-      if (k !== activeWave) out[k] = { ...out[k], enabled: false };
-    });
-    return out;
-  };
+  const isWavFormat = (fmt) => fmt === 'wav24_44' || fmt === 'wav24_48';
 
-  // ================= WAV / MP3 EXPORT =================
+  const getEstimateForDuration = (seconds, fmt) => {
+    const est = exportTimeEstimates[seconds];
+    if (!est) return null;
+    return isWavFormat(fmt) ? est.wav : est.mp3;
+  };
 
   const buildWavHeader = (totalFrames, sr) => {
     const nc = 2, bps = 3, ba = nc * bps, br = sr * ba;
@@ -839,10 +960,8 @@ const getEstimateForDuration = (seconds, fmt) => {
     });
   };
 
-  const lamejsRef = useRef(null);
   const mp3WorkerRef = useRef(null);
 
-  // ================= NATURE BUFFER LOADER (offline export only) =================
   const loadNatureBuffer = async (url) => {
     const res = await fetch(url);
     const arr = await res.arrayBuffer();
@@ -892,7 +1011,7 @@ const getEstimateForDuration = (seconds, fmt) => {
       setExportProgress(prev => ({ ...prev, stage: 'rendering' }));
     }
 
-    let pendingEncode = null; // { promise, id }
+    let pendingEncode = null;
 
     for (let chunkIndex = 0; chunkIndex < numChunks; chunkIndex++) {
       const isLastChunk = chunkIndex === numChunks - 1;
@@ -963,7 +1082,6 @@ const getEstimateForDuration = (seconds, fmt) => {
         });
       }
 
-      // Mientras renderizamos este chunk, esperamos el encoding del chunk anterior
       if (pendingEncode) {
         const mp3Part = await pendingEncode.promise;
         if (mp3Part.length > 0) blobParts.push(mp3Part);
@@ -996,7 +1114,6 @@ const getEstimateForDuration = (seconds, fmt) => {
       }
 
       if (isMP3) {
-        // Lanzamos encoding en worker SIN esperar — corre en paralelo con el siguiente render
         pendingEncode = {
           promise: encodeChunkWithWorker(mp3Worker, leftData, rightData, chunkIndex)
         };
@@ -1018,7 +1135,6 @@ const getEstimateForDuration = (seconds, fmt) => {
       await new Promise(resolve => setTimeout(resolve, 0));
     }
 
-    // Esperar el último chunk pendiente
     if (pendingEncode) {
       const mp3Part = await pendingEncode.promise;
       if (mp3Part.length > 0) blobParts.push(mp3Part);
@@ -1085,7 +1201,6 @@ const getEstimateForDuration = (seconds, fmt) => {
     }
   };
 
-  // ================= PRESETS =================
   const PRESETS = {
     DeepSleep: {
       layers: {
@@ -1235,7 +1350,7 @@ const getEstimateForDuration = (seconds, fmt) => {
         Object.keys(newLayers).forEach((layerKey) => {
           newLayers[layerKey] = p.layers?.[layerKey] || { intensity: 0, bass: 50, volume: 100, texture: 50, brightness: 50 };
         });
-        return simpleMode ? sanitizeLayersForSimple(newLayers) : newLayers;
+        return newLayers;
       });
       setBrainwaves((prev) => {
         const merged = { ...prev };
@@ -1245,11 +1360,10 @@ const getEstimateForDuration = (seconds, fmt) => {
             if (merged[waveKey]) merged[waveKey] = { ...merged[waveKey], ...p.brainwaves[waveKey] };
           });
         }
-        return simpleMode ? sanitizeBrainwavesForSimple(merged) : merged;
+        return merged;
       });
       setProcessing((prev) => ({ ...prev, ...(p.processing || {}) }));
 
-      // Apply nature sounds from preset and start them imperatively if playing
       if (p.natureSounds) {
         setNatureSounds(prev => {
           const next = { ...prev };
@@ -1258,7 +1372,6 @@ const getEstimateForDuration = (seconds, fmt) => {
           });
           return next;
         });
-        // Start preset nature sounds imperatively if already playing
         if (isPlayingRef.current) {
           Object.entries(p.natureSounds).forEach(([sk, cfg]) => {
             if (cfg.enabled && !natureAudioRefs.current[sk]) {
@@ -1273,7 +1386,6 @@ const getEstimateForDuration = (seconds, fmt) => {
     }, 150);
   };
 
-  // ================= TEXT HELPERS =================
   const getLayerDesc = (k) => {
     const d = {
       white: '✨ Bright, constant - Crystal clear focus',
@@ -1308,523 +1420,592 @@ const getEstimateForDuration = (seconds, fmt) => {
     const remainingMins = mins % 60;
     return `${hours}h ${remainingMins}m`;
   };
-// ================= EXPORT DURATION BUTTONS WITH ESTIMATES =================
-const ExportDurationButtons = ({ format }) => {
-  const estimate = getEstimateForDuration(exportConfig.duration, format);
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-yellow-200 font-medium text-sm">Duration</span>
-        {estimate && (
-          <span className="text-yellow-300 font-semibold text-sm tabular-nums">
-            {estimate} approx
-          </span>
-        )}
+
+  const ExportDurationButtons = ({ format }) => {
+    const estimate = getEstimateForDuration(exportConfig.duration, format);
+    return (
+      <div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+          <span style={{ color: '#fef08a', fontWeight: 500, fontSize: '14px' }}>Duration</span>
+          {estimate && (
+            <span style={{ color: '#fde047', fontWeight: 600, fontSize: '14px', fontVariantNumeric: 'tabular-nums' }}>
+              {estimate} approx
+            </span>
+          )}
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px', marginBottom: '16px' }}>
+          {quickDurations.map((option) => (
+            <button
+              key={option.label}
+              onClick={() => setExportConfig(pr => ({ ...pr, duration: option.seconds }))}
+              style={exportConfig.duration === option.seconds ? {
+                background: 'linear-gradient(to right,#facc15,#fde047)',
+                color: '#000',
+                border: '2px solid #eab308',
+                boxShadow: '0 4px 6px rgba(250,204,21,0.5)',
+                padding: '12px',
+                borderRadius: '8px',
+                fontSize: '12px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                transition: 'all 0.3s',
+              } : {
+                background: '#0f172a',
+                color: '#fef9c3',
+                border: '2px solid rgba(250,204,21,0.3)',
+                padding: '12px',
+                borderRadius: '8px',
+                fontSize: '12px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                transition: 'all 0.3s',
+              }}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
       </div>
-      <div className="grid grid-cols-4 gap-2 mb-4">
-        {quickDurations.map((option) => (
-          <button
-            key={option.label}
-            onClick={() => setExportConfig(pr => ({ ...pr, duration: option.seconds }))}
-            className={`px-3 py-3 rounded-lg text-xs font-semibold transition-all duration-300 border-2 shadow-md ${
-              exportConfig.duration === option.seconds
-                ? 'bg-gradient-to-r from-yellow-400 to-yellow-300 text-black border-yellow-500 shadow-yellow-400/50'
-                : 'bg-slate-900 text-yellow-200 border-yellow-400/30 hover:border-yellow-400/60'
-            }`}
-          >
-            {option.label}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-};
+    );
+  };
 
   // ================= UI =================
   return (
-    <div className="w-screen h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
-      <div className="w-full h-full p-4 sm:p-6">
-        <div className="w-full h-full bg-gradient-to-b from-slate-900/95 to-slate-950/95 backdrop-blur-xl rounded-2xl border border-yellow-400/30 shadow-2xl shadow-yellow-400/10 overflow-y-auto">
+    <div style={{ width: '100vw', minHeight: '100vh', background: 'linear-gradient(135deg,#020617,#0f172a,#020617)', overflowX: 'hidden' }}>
+      <style>{`
+        *, *::before, *::after { box-sizing: border-box !important; }
+        html, body, #root { margin: 0 !important; padding: 0 !important; width: 100% !important; }
+        @keyframes neurialWaveMotion {
+          0%, 100% { transform: translateY(0px); }
+          50% { transform: translateY(-2px); }
+        }
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.5; }
+        }
+        input[type=range] {
+          -webkit-appearance: none;
+          appearance: none;
+          width: 100%;
+          height: 8px;
+          border-radius: 8px;
+          background: rgba(51,65,85,0.5);
+          cursor: pointer;
+          outline: none;
+          display: block;
+        }
+        input[type=range]::-webkit-slider-thumb {
+          -webkit-appearance: none;
+          appearance: none;
+          width: 18px;
+          height: 18px;
+          border-radius: 50%;
+          background: #facc15;
+          cursor: pointer;
+          box-shadow: 0 0 4px rgba(250,204,21,0.6);
+        }
+        input[type=range]::-moz-range-thumb {
+          width: 18px;
+          height: 18px;
+          border-radius: 50%;
+          background: #facc15;
+          cursor: pointer;
+          border: none;
+          box-shadow: 0 0 4px rgba(250,204,21,0.6);
+        }
+        input[type=checkbox] {
+          accent-color: #facc15;
+          width: 16px;
+          height: 16px;
+          cursor: pointer;
+        }
+      `}</style>
+      <div style={{
+        width: '100%',
+        minHeight: '100vh',
+        background: 'linear-gradient(to bottom,rgba(15,23,42,0.97),rgba(2,6,23,0.97))',
+      }}>
 
           {/* HEADER */}
-          <div className="p-6 border-b border-yellow-400/20 bg-gradient-to-r from-slate-900/50 to-slate-800/50">
-          <style>{`
-@keyframes neurialWaveMotion {
-  0%, 100% {
-    transform: translateY(0px);
-  }
-  50% {
-    transform: translateY(-2px);
-  }
-}
-`}</style>
-            <div className="flex items-center justify-between">
+          <div style={{
+            padding: '24px 32px',
+            borderBottom: '1px solid rgba(250,204,21,0.2)',
+            background: 'linear-gradient(to right,rgba(15,23,42,0.5),rgba(30,41,59,0.5))'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div>
-                <h1
-  className="text-3xl font-bold bg-gradient-to-r from-yellow-200 via-yellow-300 to-yellow-400 bg-clip-text text-transparent mb-1"
-  style={{
-    animation: 'neurialWaveMotion 4s ease-in-out infinite'
-  }}
->
-  NEURIAL
-</h1>
-                <p className="text-yellow-200/80 text-sm">✨ Professional 3D audio with crystal-clear quality</p>
+                <h1 style={{
+                  fontSize: '30px',
+                  fontWeight: 700,
+                  marginBottom: '4px',
+                  margin: '0 0 4px 0',
+                  background: 'linear-gradient(to right,#fef9c3,#fde047,#facc15)',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  backgroundClip: 'text',
+                  animation: 'neurialWaveMotion 4s ease-in-out infinite'
+                }}>
+                  NEURIAL
+                </h1>
+                <p style={{ fontSize: '14px', color: 'rgba(254,240,138,0.8)', margin: 0 }}>✨ Professional 3D audio with crystal-clear quality</p>
               </div>
-              <Waves className="w-12 h-12 text-yellow-300 animate-pulse" />
+
+              {isPro ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <div style={{ textAlign: 'right' }}>
+                    <p style={{ fontSize: '12px', fontWeight: 700, color: '#facc15', margin: '0 0 2px 0' }}>⚡ PRO</p>
+                    {user?.email && <p style={{ fontSize: '12px', color: '#94a3b8', maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', margin: 0 }}>{user.email}</p>}
+                  </div>
+                  {onSignOut && (
+                    <button onClick={onSignOut} style={{ padding: '6px 12px', borderRadius: '8px', fontSize: '12px', color: '#94a3b8', border: '1px solid #475569', background: 'transparent', cursor: 'pointer' }}>
+                      Sign out
+                    </button>
+                  )}
+                  <Waves style={{ width: '48px', height: '48px', color: '#fde047', animation: 'pulse 2s ease-in-out infinite' }} />
+                </div>
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  {user?.email && <p style={{ fontSize: '12px', color: '#94a3b8', maxWidth: '100px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', margin: 0 }}>{user.email}</p>}
+                  <button
+                    onClick={() => window.location.href = `https://buy.stripe.com/test_9B6cN5eKfeBZ3OCfPH4gg00?success_url=${encodeURIComponent(window.location.origin + '?upgraded=true')}`}
+                    style={{ padding: '8px 16px', borderRadius: '12px', fontWeight: 700, fontSize: '14px', background: 'linear-gradient(to right,#facc15,#fde047)', color: '#000', border: '2px solid rgba(234,179,8,0.5)', boxShadow: '0 4px 6px rgba(250,204,21,0.3)', cursor: 'pointer', transition: 'all 0.3s' }}
+                  >
+                    ⚡ Upgrade
+                  </button>
+                  {onSignOut && (
+                    <button onClick={onSignOut} style={{ padding: '6px 12px', borderRadius: '8px', fontSize: '12px', color: '#94a3b8', border: '1px solid #475569', background: 'transparent', cursor: 'pointer' }}>
+                      Sign out
+                    </button>
+                  )}
+                  <Waves style={{ width: '48px', height: '48px', color: '#fde047', animation: 'pulse 2s ease-in-out infinite' }} />
+                </div>
+              )}
             </div>
           </div>
 
           {/* PRESETS SECTION */}
-          <div className="p-6 border-b border-yellow-400/10 bg-gradient-to-b from-transparent to-slate-900/30">
-            {simpleMode ? (
-              simpleView === 'main' ? (
-                <div className="space-y-3">
-                  {SIMPLE_PRESET_KEYS.filter(k => PRESETS[k]).map(p => (
-                    <button
-                      key={p}
-                      onClick={() => {
-                        if (isTransitioning) return;
-                        applyPreset(p);
-                      }}
-                      className={`w-full text-left px-5 py-4 rounded-xl transition-all duration-300 border-2 font-semibold shadow-lg ${
-                        activePreset === p
-                          ? 'bg-gradient-to-r from-yellow-400 to-yellow-300 text-black border-yellow-500 shadow-yellow-400/50 scale-105'
-                          : 'bg-gradient-to-r from-slate-800 to-slate-700 text-white border-yellow-400/30 hover:border-yellow-400/60 hover:shadow-yellow-400/30 hover:scale-105'
-                      }`}
-                    >
-                      <div className="capitalize text-lg">
-                        {p.replace(/([A-Z])/g, ' $1').trim()}
-                      </div>
-                    </button>
-                  ))}
-
-                  <button
-                    onClick={() => setSimpleView('export')}
-                    className="w-full bg-gradient-to-r from-slate-800 to-slate-700 text-white px-5 py-4 rounded-xl transition-all duration-300 hover:from-yellow-400 hover:to-yellow-300 hover:text-black border-2 border-yellow-400/30 hover:border-yellow-500 font-semibold shadow-lg hover:shadow-yellow-400/30 hover:scale-105"
-                  >
-                    📥 Export Audio
-                  </button>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  <button
-                    onClick={() => setSimpleView('main')}
-                    className="bg-gradient-to-r from-slate-800 to-slate-700 text-white px-4 py-3 rounded-lg hover:from-yellow-400 hover:to-yellow-300 hover:text-black transition-all duration-300 border-2 border-yellow-400/30 hover:border-yellow-500 font-semibold shadow-md"
-                  >
-                    ← Back to Presets
-                  </button>
-
-                  <div className="bg-slate-800/50 p-5 rounded-lg border-2 border-yellow-400/20">
-                    <label className="block text-yellow-200 font-medium text-sm mb-3">Quality</label>
-                    <select
-                      value={exportConfig.format}
-                      onChange={(e) => setExportConfig(pr => ({ ...pr, format: e.target.value }))}
-                      className="w-full bg-slate-900 text-yellow-200 px-4 py-3 rounded-lg text-sm border-2 border-yellow-400/30 focus:border-yellow-400"
-                    >
-                      <option value="wav24_44">24-bit / 44.1kHz</option>
-                      <option value="wav24_48">24-bit / 48kHz</option>
-                      <option value="mp3_320">MP3 / 320 kbps</option>
-                      <option value="mp3_256">MP3 / 256 kbps</option>
-                      <option value="mp3_192">MP3 / 192 kbps</option>
-                      <option value="mp3_160">MP3 / 160 kbps</option>
-                      <option value="mp3_128">MP3 / 128 kbps</option>
-                    </select>
-                  </div>
-
-                  <div className="bg-slate-800/50 p-5 rounded-lg border-2 border-yellow-400/20">
-                    <label className="block text-yellow-200 font-medium text-sm mb-3">Duration</label>
-                    <ExportDurationButtons format={exportConfig.format} />
-                    <div>
-                      <label className="block text-yellow-200/70 text-xs mb-2">
-                        Custom (seconds): <span {...NT}>{exportConfig.duration}</span>
-                      </label>
-                      <input
-                        type="number"
-                        value={exportConfig.duration}
-                        onChange={(e) => setExportConfig(pr => ({ ...pr, duration: parseInt(e.target.value) || 60 }))}
-                        className="w-full bg-slate-900 text-yellow-200 px-4 py-3 rounded-lg text-sm border-2 border-yellow-400/30 focus:border-yellow-400"
-                        min="10" max="28800"
-                      />
-                      <p className="text-xs text-yellow-200/60 mt-2">Range: <span {...NT}>10</span> seconds to <span {...NT}>8</span> hours</p>
-                    </div>
-                  </div>
-
-                  {Notification.permission !== 'granted' && (
-                    <button onClick={requestNotificationPermission} className="w-full bg-gradient-to-r from-slate-800 to-slate-700 text-white px-5 py-3 rounded-lg font-semibold transition-all duration-300 hover:from-yellow-400 hover:to-yellow-300 hover:text-black border-2 border-yellow-400/30 hover:border-yellow-500 flex items-center justify-center gap-2 text-sm shadow-md">
-                      🔔 Enable notifications (recommended for long exports)
-                    </button>
-                  )}
-                  {notificationsEnabled && (
-                    <div className="bg-green-500/10 border-2 border-green-400/30 rounded-lg p-4">
-                      <p className="text-green-200 text-xs text-center">✅ Notifications enabled - You'll be notified when export completes</p>
-                    </div>
-                  )}
-
-                  <button
-                    onClick={expSound}
-                    disabled={isGenerating}
-                    className="w-full bg-gradient-to-r from-yellow-400 to-yellow-300 hover:from-yellow-300 hover:to-yellow-200 text-black px-6 py-4 rounded-xl font-bold transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3 border-2 border-yellow-500/50 shadow-lg hover:shadow-yellow-400/50 text-lg"
-                  >
-                    {isGenerating ? (<><div className="w-5 h-5 border-2 border-black/30 border-t-black rounded-full animate-spin" />Exporting...</>) : (<><Download className="w-6 h-6" />Export Audio</>)}
-                  </button>
-                </div>
-              )
-            ) : (
-              <div className="grid grid-cols-2 gap-2" style={{ isolation: 'isolate' }}>
-
-                {ADVANCED_PRESET_KEYS.map(p => (
-                  <button
-                    key={p}
-                    onClick={() => {
-                      if (isTransitioning) return;
-                      applyPreset(p);
-                    }}
-                    className={`px-4 py-3 rounded-lg text-sm transition-all duration-300 border-2 font-semibold shadow-md ${
-                      activePreset === p
-                        ? 'bg-gradient-to-r from-yellow-400 to-yellow-300 text-black border-yellow-500 shadow-yellow-400/50 ring-2 ring-yellow-400/50'
-
-                        : 'bg-gradient-to-r from-slate-800 to-slate-700 text-white border-yellow-400/30 hover:border-yellow-400/60 hover:shadow-yellow-400/30'
-                    }`}
-                  >
-                    {p.replace(/([A-Z])/g, ' $1').trim()}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* MODE SELECTOR */}
-          <div className="px-6 pt-4">
-            <div className="flex items-center justify-between bg-slate-800/50 rounded-lg p-3 border border-yellow-400/20">
-              <div className="text-sm text-yellow-200/90">
-                Mode: <span className="font-semibold text-yellow-300">{simpleMode ? 'Simple' : 'Advanced'}</span>
-              </div>
-              <button
-                onClick={() => { setSimpleMode(s => !s); setSimpleView('main'); }}
-                className="text-xs px-4 py-2 rounded-lg bg-gradient-to-r from-yellow-400 to-yellow-300 text-black hover:from-yellow-300 hover:to-yellow-200 transition-all duration-300 border-2 border-yellow-500/50 font-semibold shadow-md hover:shadow-yellow-400/50"
-              >
-                {simpleMode ? '🔧 Switch to Advanced' : '🎯 Switch to Simple'}
-              </button>
+          <div style={{ padding: '24px 32px', borderBottom: '1px solid rgba(250,204,21,0.1)' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', isolation: 'isolate' }}>
+              {['DeepSleep', 'DeepSpace', 'CalmMind', 'MentalReset', 'DeepFocus', 'TinnitusMasking', 'ADHDSupport', 'MeditationFlow'].map(p => (
+                <button
+                  key={p}
+                  onClick={() => { if (isTransitioning) return; applyPreset(p); }}
+                  style={activePreset === p ? {
+                    padding: '12px 16px',
+                    borderRadius: '8px',
+                    fontSize: '14px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    transition: 'all 0.3s',
+                    background: 'linear-gradient(to right,#facc15,#fde047)',
+                    color: '#000',
+                    border: '2px solid #eab308',
+                    boxShadow: '0 4px 6px rgba(250,204,21,0.5)',
+                    outline: '2px solid rgba(250,204,21,0.5)',
+                    outlineOffset: '2px'
+                  } : {
+                    padding: '12px 16px',
+                    borderRadius: '8px',
+                    fontSize: '14px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    transition: 'all 0.3s',
+                    background: 'linear-gradient(to right,#1e293b,#0f172a)',
+                    color: '#fff',
+                    border: '2px solid rgba(250,204,21,0.3)'
+                  }}
+                >
+                  {p.replace(/([A-Z])/g, ' $1').trim()}
+                </button>
+              ))}
             </div>
           </div>
 
-          {/* TABS (Advanced Mode Only) */}
-          {!simpleMode && (
-            <div className="mt-4 px-6">
-              <div className="flex gap-2 border-b border-yellow-400/10 pb-3">
-                {['layers', 'nature', 'brainwaves', 'export'].map(t => (
-                  <button
-                    key={t}
-                    onClick={() => setActiveTab(t)}
-                    className={`flex-1 py-3 rounded-xl font-semibold transition-all duration-300 border-2 text-xs sm:text-sm shadow-md
-                      ${activeTab === t
-                        ? 'bg-gradient-to-r from-yellow-400 to-yellow-300 text-black border-yellow-500 shadow-yellow-400/50'
-                        : 'bg-gradient-to-r from-slate-800 to-slate-700 text-white border-yellow-400/20 hover:border-yellow-400/50 hover:shadow-yellow-400/30'
-                      }`}
-                  >
-                    {t.charAt(0).toUpperCase() + t.slice(1)}
-                  </button>
-                ))}
-              </div>
+          {/* TABS */}
+          <div style={{ marginTop: '16px', padding: '0 32px' }}>
+            <div style={{ display: 'flex', gap: '8px', paddingBottom: '12px', borderBottom: '1px solid rgba(250,204,21,0.1)' }}>
+              {['layers', 'nature', 'brainwaves', 'export'].map(t => (
+                <button
+                  key={t}
+                  onClick={() => setActiveTab(t)}
+                  style={activeTab === t ? {
+                    flex: 1,
+                    padding: '12px',
+                    borderRadius: '12px',
+                    fontWeight: 600,
+                    fontSize: '14px',
+                    cursor: 'pointer',
+                    transition: 'all 0.3s',
+                    background: 'linear-gradient(to right,#facc15,#fde047)',
+                    color: '#000',
+                    border: '2px solid #eab308',
+                    boxShadow: '0 4px 6px rgba(250,204,21,0.5)'
+                  } : {
+                    flex: 1,
+                    padding: '12px',
+                    borderRadius: '12px',
+                    fontWeight: 600,
+                    fontSize: '14px',
+                    cursor: 'pointer',
+                    transition: 'all 0.3s',
+                    background: 'linear-gradient(to right,#1e293b,#0f172a)',
+                    color: '#fff',
+                    border: '2px solid rgba(250,204,21,0.2)'
+                  }}
+                >
+                  {t.charAt(0).toUpperCase() + t.slice(1)}
+                </button>
+              ))}
             </div>
-          )}
+          </div>
 
           {/* MAIN CONTENT */}
-          <div className="p-6">
-            {simpleMode && simpleView === 'main' ? (
-              <div className="space-y-5">
-                <div className="bg-gradient-to-r from-yellow-400/10 to-yellow-300/10 border-2 border-yellow-400/30 rounded-lg p-4">
-<p className="text-yellow-200 text-xs">💡 <strong>3D Audio Tip:</strong> Choose a preset above for instant professional-grade 3D sound with perfectly balanced frequencies &nbsp;·&nbsp; 🎧 Headphones recommended for full 3D effect</p>
-                </div>
+          <div style={{ padding: '24px 32px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
 
-                <div>
-                  <h4 className="text-yellow-200 text-sm font-semibold mb-4">🎨 Sound Colors</h4>
-                  {SIMPLE_ALLOWED_LAYERS.map((t) => {
-                    const c = layers[t];
-                    if (!c) return null;
-                    return (
-                      <div key={t} className="bg-slate-800/50 p-4 rounded-lg border-2 border-yellow-400/20 mb-4 hover:border-yellow-400/40 transition-all duration-300">
-                        <div className="flex items-start justify-between mb-3">
-                          <div>
-                            <h5 className="text-yellow-200 font-medium capitalize text-sm">{t} Noise</h5>
-                            <p className="text-yellow-200/60 text-xs mt-1">{getLayerDesc(t)}</p>
-                          </div>
+              {/* ===== LAYERS TAB ===== */}
+              {activeTab === 'layers' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  <div style={{ borderRadius: '8px', padding: '16px', marginBottom: '16px', background: 'linear-gradient(90deg,rgba(250,204,21,0.1),rgba(253,224,71,0.1))', border: '2px solid rgba(250,204,21,0.3)' }}>
+                    <p style={{ color: '#fef08a', fontSize: '12px', margin: 0 }}>🎨 <strong>Sound Colors:</strong> Each noise type has a unique frequency profile. Mix and match to create your perfect soundscape with crystal-clear 3D audio. &nbsp;·&nbsp; 🎧 Best experienced with headphones on</p>
+                  </div>
+                  {Object.entries(layers).map(([t, c]) => (
+                    <div key={t} style={{ padding: '16px', borderRadius: '8px', transition: 'all 0.3s', background: 'rgba(30,41,59,0.5)', border: '2px solid rgba(250,204,21,0.2)', overflow: 'visible', textAlign: 'left' }}>
+                      <h4 style={{ color: '#fef08a', fontWeight: 500, fontSize: '14px', marginBottom: '8px', textTransform: 'capitalize', margin: '0 0 8px 0' }}>{t} Noise</h4>
+                      <p style={{ fontSize: '12px', marginBottom: '12px', color: 'rgba(254,240,138,0.6)', margin: '0 0 12px 0' }}>{getLayerDesc(t)}</p>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                        <div style={{ paddingBottom: '4px' }}>
+                          <label style={{ display: 'block', fontSize: '12px', marginBottom: '8px', color: 'rgba(254,240,138,0.7)' }}>Intensity: <span {...NT}>{c.intensity}%</span></label>
+                          <input type="range" min="0" max="100" value={c.intensity} onChange={(e) => setLayers(pr => ({ ...pr, [t]: { ...pr[t], intensity: parseInt(e.target.value) } }))} />
                         </div>
-                        <div className="space-y-3">
-                          <div>
-                            <label className="block text-yellow-200/70 text-xs mb-2">Intensity: <span {...NT}>{c.intensity}%</span></label>
-                            <input type="range" min="0" max="100" value={c.intensity} onChange={(e) => setLayers(pr => ({ ...pr, [t]: { ...pr[t], intensity: parseInt(e.target.value) } }))} className="w-full h-2 bg-slate-700/50 rounded-lg appearance-none cursor-pointer accent-yellow-400" />
-                          </div>
-                          {c.intensity > 0 && (
-                            <>
-                              <div>
-                                <label className="block text-yellow-200/70 text-xs mb-2">Volume: <span {...NT}>{c.volume}%</span></label>
-                                <input type="range" min="0" max="100" value={c.volume} onChange={(e) => setLayers(pr => ({ ...pr, [t]: { ...pr[t], volume: parseInt(e.target.value) } }))} className="w-full h-2 bg-slate-700/50 rounded-lg appearance-none cursor-pointer accent-yellow-400" />
-                              </div>
-                              <div>
-                                <label className="block text-yellow-200/70 text-xs mb-2">Texture: <span {...NT}>{c.texture}%</span></label>
-                                <input type="range" min="0" max="100" value={c.texture} onChange={(e) => setLayers(pr => ({ ...pr, [t]: { ...pr[t], texture: parseInt(e.target.value) } }))} className="w-full h-2 bg-slate-700/50 rounded-lg appearance-none cursor-pointer accent-yellow-400" />
-                              </div>
-                            </>
-                          )}
-                        </div>
+                        {c.intensity > 0 && (
+                          <>
+                            <div style={{ paddingBottom: '4px' }}>
+                              <label style={{ display: 'block', fontSize: '12px', marginBottom: '8px', color: 'rgba(254,240,138,0.7)' }}>Volume: <span {...NT}>{c.volume}%</span></label>
+                              <input type="range" min="0" max="100" value={c.volume} onChange={(e) => setLayers(pr => ({ ...pr, [t]: { ...pr[t], volume: parseInt(e.target.value) } }))} />
+                            </div>
+                            <div style={{ paddingBottom: '4px' }}>
+                              <label style={{ display: 'block', fontSize: '12px', marginBottom: '8px', color: 'rgba(254,240,138,0.7)' }}>Texture: <span {...NT}>{c.texture}%</span></label>
+                              <input type="range" min="0" max="100" value={c.texture} onChange={(e) => setLayers(pr => ({ ...pr, [t]: { ...pr[t], texture: parseInt(e.target.value) } }))} />
+                            </div>
+                          </>
+                        )}
                       </div>
-                    );
-                  })}
+                    </div>
+                  ))}
                 </div>
+              )}
 
-                {/* NATURE SOUNDS - Simple Mode */}
-                <div>
-                  <h4 className="text-yellow-200 text-sm font-semibold mb-4">🌿 Nature Sounds</h4>
-                  {['rain', 'ocean'].map((soundKey) => {
+              {/* ===== NATURE TAB ===== */}
+              {activeTab === 'nature' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  <div style={{ borderRadius: '8px', padding: '16px', marginBottom: '16px', background: 'linear-gradient(90deg,rgba(250,204,21,0.1),rgba(253,224,71,0.1))', border: '2px solid rgba(250,204,21,0.3)' }}>
+                    <p style={{ color: '#fef08a', fontSize: '12px', margin: 0 }}>🌿 <strong>Nature Sounds:</strong> Add realistic nature ambience to your mix. These are your own high-quality recordings that loop seamlessly. &nbsp;·&nbsp; 🎧 Headphones bring every detail to life</p>
+                  </div>
+                  {['rain', 'storm', 'ocean', 'wind', 'fire', 'waterfall', 'river', 'nightforest', 'nightingale'].map((soundKey) => {
                     const soundConfig = natureSounds[soundKey];
                     const soundNames = {
                       rain: { name: '🌧️ Rain', desc: 'Gentle rain sounds' },
-                      ocean: { name: '🌊 Ocean Waves', desc: 'Calm ocean waves with birds' }
+                      storm: { name: '⛈️ Thunderstorm', desc: 'Intense thunderstorm' },
+                      ocean: { name: '🌊 Ocean Waves', desc: 'Calm ocean waves with birds' },
+                      wind: { name: '💨 Wind', desc: 'Soft wind breeze' },
+                      fire: { name: '🔥 Campfire', desc: 'Crackling fire sounds' },
+                      waterfall: { name: '💧 Waterfall', desc: 'Flowing waterfall' },
+                      river: { name: '🏞️ River in Forest', desc: 'River flowing through forest' },
+                      nightforest: { name: '🌙 Night Forest', desc: 'Forest at night with insects' },
+                      nightingale: { name: '🐦 Nightingale', desc: 'Pure nightingale song in forest' }
                     };
                     const info = soundNames[soundKey];
                     return (
-                      <div key={soundKey} className="bg-slate-800/50 p-4 rounded-lg border-2 border-yellow-400/20 mb-3 hover:border-yellow-400/40 transition-all duration-300">
-                        <div className="flex items-start justify-between mb-2">
+                      <div key={soundKey} style={{ padding: '16px', borderRadius: '8px', transition: 'all 0.3s', background: 'rgba(30,41,59,0.5)', border: '2px solid rgba(250,204,21,0.2)', overflow: 'visible', textAlign: 'left' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
                           <div>
-                            <h5 className="text-yellow-200 font-medium text-sm">{info.name}</h5>
-                            <p className="text-yellow-200/60 text-xs mt-0.5">{info.desc}</p>
+                            <h4 style={{ color: '#fef08a', fontWeight: 500, fontSize: '14px', margin: '0 0 2px 0' }}>{info.name}</h4>
+                            <p style={{ fontSize: '12px', color: 'rgba(254,240,138,0.6)', margin: 0 }}>{info.desc}</p>
                           </div>
-                          <label className="text-xs text-yellow-200/70 flex items-center gap-2 cursor-pointer">
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
                             <input
                               type="checkbox"
                               checked={soundConfig.enabled}
                               onChange={(e) => handleNatureToggle(soundKey, e.target.checked)}
-                              className="w-4 h-4 accent-yellow-400"
                             />
-                            Enable
+                            <span style={{ fontSize: '12px', color: 'rgba(254,240,138,0.7)' }}>Enable</span>
                           </label>
                         </div>
                         {soundConfig.enabled && (
-                          <div>
-                            <label className="block text-yellow-200/70 text-xs mb-1">Volume: <span {...NT}>{soundConfig.volume}%</span></label>
-                            <input type="range" min="0" max="100" value={soundConfig.volume} onChange={(e) => setNatureSounds(prev => ({ ...prev, [soundKey]: { ...prev[soundKey], volume: parseInt(e.target.value) } }))} className="w-full h-2 bg-slate-700/50 rounded-lg appearance-none cursor-pointer accent-yellow-400" />
+                          <div style={{ marginTop: '12px', paddingBottom: '4px' }}>
+                            <label style={{ display: 'block', fontSize: '12px', marginBottom: '4px', color: 'rgba(254,240,138,0.7)' }}>Volume: <span {...NT}>{soundConfig.volume}%</span></label>
+                            <input type="range" min="0" max="100" value={soundConfig.volume} onChange={(e) => setNatureSounds(prev => ({ ...prev, [soundKey]: { ...prev[soundKey], volume: parseInt(e.target.value) } }))} />
                           </div>
                         )}
                       </div>
                     );
                   })}
                 </div>
+              )}
 
-                {/* BRAINWAVES - Simple Mode */}
-                <div>
-                  <h4 className="text-yellow-200 text-sm font-semibold mb-3">🧠 Brainwaves</h4>
-                  {(() => {
-                    const t = 'alpha';
-                    const c = brainwaves[t];
-                    if (!c) return null;
-                    return (
-                      <div className="bg-slate-800/50 p-4 rounded-lg border-2 border-yellow-400/20 hover:border-yellow-400/40 transition-all duration-300">
-                        <div className="flex items-center justify-between mb-2">
-                          <h5 className="text-yellow-200 font-medium capitalize text-sm">{t} Wave</h5>
-                          <label className="text-xs text-yellow-200/70 flex items-center gap-2 cursor-pointer">
-                            <input type="checkbox" checked={c.enabled} onChange={(e) => setBrainwaves(pr => ({ ...pr, [t]: { ...pr[t], enabled: e.target.checked } }))} className="w-4 h-4 accent-yellow-400" />
-                            Enabled
-                          </label>
-                        </div>
-                        <p className="text-yellow-200/60 text-xs mb-3">{getBrainDesc(t)}</p>
-                        {c.enabled && (
-                          <div className="space-y-2">
-                            <div>
-                              <label className="block text-xs text-yellow-200/70 mb-1">Wave Intensity: <span {...NT}>{c.intensity}%</span></label>
-                              <input type="range" min="0" max="100" value={c.intensity} onChange={(e) => setBrainwaves(pr => ({ ...pr, [t]: { ...pr[t], intensity: parseInt(e.target.value) } }))} className="w-full h-2 bg-slate-700/50 rounded-lg appearance-none cursor-pointer accent-yellow-400" />
-                            </div>
-                          </div>
-                        )}
+              {/* ===== BRAINWAVES TAB ===== */}
+              {activeTab === 'brainwaves' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  <div style={{ borderRadius: '8px', padding: '16px', marginBottom: '16px', background: 'linear-gradient(90deg,rgba(250,204,21,0.1),rgba(253,224,71,0.1))', border: '2px solid rgba(250,204,21,0.3)' }}>
+                    <p style={{ color: '#fef08a', fontSize: '12px', margin: 0 }}>🧠 <strong>Brainwave Entrainment:</strong> Binaural beats that guide your brain into specific states. Each frequency targets different mental states for optimal results. &nbsp;·&nbsp; 🎧 Headphones enhance the binaural effect</p>
+                  </div>
+                  {Object.entries(brainwaves).map(([t, c]) => (
+                    <div key={t} style={{ padding: '16px', borderRadius: '8px', transition: 'all 0.3s', background: 'rgba(30,41,59,0.5)', border: '2px solid rgba(250,204,21,0.2)', overflow: 'visible', textAlign: 'left' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                        <label style={{ color: '#fef08a', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', cursor: 'pointer', textTransform: 'capitalize' }}>
+                          <input type="checkbox" checked={c.enabled} onChange={(e) => setBrainwaves(pr => ({ ...pr, [t]: { ...pr[t], enabled: e.target.checked } }))} />
+                          {t} Wave
+                        </label>
                       </div>
-                    );
-                  })()}
+                      <p style={{ fontSize: '12px', marginBottom: '12px', color: 'rgba(254,240,138,0.6)', margin: '0 0 12px 0' }}>{getBrainDesc(t)}</p>
+                      {c.enabled && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                          <div style={{ paddingBottom: '4px' }}>
+                            <label style={{ display: 'block', fontSize: '12px', marginBottom: '8px', color: 'rgba(254,240,138,0.7)' }}>Carrier Frequency: <span {...NT}>{c.carrier} Hz</span></label>
+                            <input type="range" min="100" max="400" value={c.carrier} onChange={(e) => setBrainwaves(pr => ({ ...pr, [t]: { ...pr[t], carrier: parseInt(e.target.value) } }))} />
+                          </div>
+                          <div style={{ paddingBottom: '4px' }}>
+                            <label style={{ display: 'block', fontSize: '12px', marginBottom: '8px', color: 'rgba(254,240,138,0.7)' }}>Beat Frequency: <span {...NT}>{c.beat} Hz</span></label>
+                            <input type="range" min="1" max="40" value={c.beat} onChange={(e) => setBrainwaves(pr => ({ ...pr, [t]: { ...pr[t], beat: parseInt(e.target.value) } }))} />
+                          </div>
+                          <div style={{ paddingBottom: '4px' }}>
+                            <label style={{ display: 'block', fontSize: '12px', marginBottom: '8px', color: 'rgba(254,240,138,0.7)' }}>Wave Intensity: <span {...NT}>{c.intensity}%</span></label>
+                            <input type="range" min="0" max="100" value={c.intensity} onChange={(e) => setBrainwaves(pr => ({ ...pr, [t]: { ...pr[t], intensity: parseInt(e.target.value) } }))} />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
                 </div>
-              </div>
-            ) : !simpleMode && (
-              <div className="space-y-4">
-                {activeTab === 'layers' && (
-                  <div className="space-y-4">
-                    <div className="bg-gradient-to-r from-yellow-400/10 to-yellow-300/10 border-2 border-yellow-400/30 rounded-lg p-4 mb-4">
-<p className="text-yellow-200 text-xs">🎨 <strong>Sound Colors:</strong> Each noise type has a unique frequency profile. Mix and match to create your perfect soundscape with crystal-clear 3D audio. &nbsp;·&nbsp; 🎧 Best experienced with headphones on</p>
-                    </div>
-                    {Object.entries(layers).map(([t, c]) => (
-                      <div key={t} className="bg-slate-800/50 p-4 rounded-lg border-2 border-yellow-400/20 hover:border-yellow-400/40 transition-all duration-300">
-                        <h4 className="text-yellow-200 font-medium capitalize text-sm mb-2">{t} Noise</h4>
-                        <p className="text-yellow-200/60 text-xs mb-3">{getLayerDesc(t)}</p>
-                        <div className="space-y-3">
-                          <div>
-                            <label className="block text-yellow-200/70 text-xs mb-2">Intensity: <span {...NT}>{c.intensity}%</span></label>
-                            <input type="range" min="0" max="100" value={c.intensity} onChange={(e) => setLayers(pr => ({ ...pr, [t]: { ...pr[t], intensity: parseInt(e.target.value) } }))} className="w-full h-2 bg-slate-700/50 rounded-lg appearance-none cursor-pointer accent-yellow-400" />
-                          </div>
-                          {c.intensity > 0 && (
-                            <>
-                              <div>
-                                <label className="block text-yellow-200/70 text-xs mb-2">Volume: <span {...NT}>{c.volume}%</span></label>
-                                <input type="range" min="0" max="100" value={c.volume} onChange={(e) => setLayers(pr => ({ ...pr, [t]: { ...pr[t], volume: parseInt(e.target.value) } }))} className="w-full h-2 bg-slate-700/50 rounded-lg appearance-none cursor-pointer accent-yellow-400" />
-                              </div>
-                              <div>
-                                <label className="block text-yellow-200/70 text-xs mb-2">Texture: <span {...NT}>{c.texture}%</span></label>
-                                <input type="range" min="0" max="100" value={c.texture} onChange={(e) => setLayers(pr => ({ ...pr, [t]: { ...pr[t], texture: parseInt(e.target.value) } }))} className="w-full h-2 bg-slate-700/50 rounded-lg appearance-none cursor-pointer accent-yellow-400" />
-                              </div>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
+              )}
 
-                {activeTab === 'nature' && (
-                  <div className="space-y-4">
-                    <div className="bg-gradient-to-r from-yellow-400/10 to-yellow-300/10 border-2 border-yellow-400/30 rounded-lg p-4 mb-4">
-<p className="text-yellow-200 text-xs">🌿 <strong>Nature Sounds:</strong> Add realistic nature ambience to your mix. These are your own high-quality recordings that loop seamlessly. &nbsp;·&nbsp; 🎧 Headphones bring every detail to life</p>
-                    </div>
-                    {['rain', 'storm', 'ocean', 'wind', 'fire', 'waterfall', 'river', 'nightforest', 'nightingale'].map((soundKey) => {
-                      const soundConfig = natureSounds[soundKey];
-                      const soundNames = {
-                        rain: { name: '🌧️ Rain', desc: 'Gentle rain sounds' },
-                        storm: { name: '⛈️ Thunderstorm', desc: 'Intense thunderstorm' },
-                        ocean: { name: '🌊 Ocean Waves', desc: 'Calm ocean waves with birds' },
-                        wind: { name: '💨 Wind', desc: 'Soft wind breeze' },
-                        fire: { name: '🔥 Campfire', desc: 'Crackling fire sounds' },
-                        waterfall: { name: '💧 Waterfall', desc: 'Flowing waterfall' },
-                        river: { name: '🏞️ River in Forest', desc: 'River flowing through forest' },
-                        nightforest: { name: '🌙 Night Forest', desc: 'Forest at night with insects' },
-                        nightingale: { name: '🐦 Nightingale', desc: 'Pure nightingale song in forest' }
-                      };
-                      const info = soundNames[soundKey];
-                      return (
-                        <div key={soundKey} className="bg-slate-800/50 p-4 rounded-lg border-2 border-yellow-400/20 hover:border-yellow-400/40 transition-all duration-300">
-                          <div className="flex items-center justify-between mb-2">
-                            <div>
-                              <h4 className="text-yellow-200 font-medium text-sm">{info.name}</h4>
-                              <p className="text-yellow-200/60 text-xs mt-0.5">{info.desc}</p>
-                            </div>
-                            <label className="flex items-center gap-2 cursor-pointer">
-                              <input
-                                type="checkbox"
-                                checked={soundConfig.enabled}
-                                onChange={(e) => handleNatureToggle(soundKey, e.target.checked)}
-                                className="w-4 h-4 accent-yellow-400"
-                              />
-                              <span className="text-yellow-200/70 text-xs">Enable</span>
-                            </label>
-                          </div>
-                          {soundConfig.enabled && (
-                            <div className="mt-3">
-                              <label className="block text-yellow-200/70 text-xs mb-1">Volume: <span {...NT}>{soundConfig.volume}%</span></label>
-                              <input type="range" min="0" max="100" value={soundConfig.volume} onChange={(e) => setNatureSounds(prev => ({ ...prev, [soundKey]: { ...prev[soundKey], volume: parseInt(e.target.value) } }))} className="w-full h-2 bg-slate-700/50 rounded-lg appearance-none cursor-pointer accent-yellow-400" />
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {activeTab === 'brainwaves' && (
-                  <div className="space-y-4">
-                    <div className="bg-gradient-to-r from-yellow-400/10 to-yellow-300/10 border-2 border-yellow-400/30 rounded-lg p-4 mb-4">
-<p className="text-yellow-200 text-xs">🧠 <strong>Brainwave Entrainment:</strong> Binaural beats that guide your brain into specific states. Each frequency targets different mental states for optimal results. &nbsp;·&nbsp; 🎧 Headphones enhance the binaural effect</p>
-                    </div>
-                    {Object.entries(brainwaves).map(([t, c]) => (
-                      <div key={t} className="bg-slate-800/50 p-4 rounded-lg border-2 border-yellow-400/20 hover:border-yellow-400/40 transition-all duration-300">
-                        <div className="flex items-center justify-between mb-2">
-                          <label className="text-yellow-200 font-medium capitalize flex items-center gap-2 text-sm cursor-pointer">
-                            <input type="checkbox" checked={c.enabled} onChange={(e) => setBrainwaves(pr => ({ ...pr, [t]: { ...pr[t], enabled: e.target.checked } }))} className="w-4 h-4 accent-yellow-400" />
-                            {t} Wave
-                          </label>
-                        </div>
-                        <p className="text-yellow-200/60 text-xs mb-3">{getBrainDesc(t)}</p>
-                        {c.enabled && (
-                          <div className="space-y-3">
-                            <div>
-                              <label className="block text-xs text-yellow-200/70 mb-2">Carrier Frequency: <span {...NT}>{c.carrier} Hz</span></label>
-                              <input type="range" min="100" max="400" value={c.carrier} onChange={(e) => setBrainwaves(pr => ({ ...pr, [t]: { ...pr[t], carrier: parseInt(e.target.value) } }))} className="w-full h-2 bg-slate-700/50 rounded-lg appearance-none cursor-pointer accent-yellow-400" />
-                            </div>
-                            <div>
-                              <label className="block text-xs text-yellow-200/70 mb-2">Beat Frequency: <span {...NT}>{c.beat} Hz</span></label>
-                              <input type="range" min="1" max="40" value={c.beat} onChange={(e) => setBrainwaves(pr => ({ ...pr, [t]: { ...pr[t], beat: parseInt(e.target.value) } }))} className="w-full h-2 bg-slate-700/50 rounded-lg appearance-none cursor-pointer accent-yellow-400" />
-                            </div>
-                            <div>
-                              <label className="block text-xs text-yellow-200/70 mb-2">Wave Intensity: <span {...NT}>{c.intensity}%</span></label>
-                              <input type="range" min="0" max="100" value={c.intensity} onChange={(e) => setBrainwaves(pr => ({ ...pr, [t]: { ...pr[t], intensity: parseInt(e.target.value) } }))} className="w-full h-2 bg-slate-700/50 rounded-lg appearance-none cursor-pointer accent-yellow-400" />
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {activeTab === 'export' && (
-                  <div className="space-y-4">
-                    <div className="bg-slate-800/50 p-5 rounded-lg border-2 border-yellow-400/20">
-                      <label className="block text-yellow-200 font-medium text-sm mb-3">Quality</label>
-                      <select value={exportConfig.format} onChange={(e) => setExportConfig(pr => ({ ...pr, format: e.target.value }))} className="w-full bg-slate-900 text-yellow-200 px-4 py-3 rounded-lg text-sm border-2 border-yellow-400/30 focus:border-yellow-400">
-                        <option value="wav24_44">WAV 24-bit / 44.1kHz</option>
-<option value="wav24_48">WAV 24-bit / 48kHz</option>
-                        <option value="mp3_320">MP3 / 320 kbps</option>
-                        <option value="mp3_256">MP3 / 256 kbps</option>
-                        <option value="mp3_192">MP3 / 192 kbps</option>
-                        <option value="mp3_160">MP3 / 160 kbps</option>
-                        <option value="mp3_128">MP3 / 128 kbps</option>
-                      </select>
-                    </div>
-                    <div className="bg-slate-800/50 p-5 rounded-lg border-2 border-yellow-400/20">
-                      <label className="block text-yellow-200 font-medium text-sm mb-3">Duration</label>
-                      <ExportDurationButtons format={exportConfig.format} />
+              {/* ===== EXPORT TAB ===== */}
+              {activeTab === 'export' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  {isLimited ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40px 16px', textAlign: 'center', gap: '20px' }}>
+                      <div style={{ fontSize: '48px' }}>🔒</div>
                       <div>
-                        <label className="block text-yellow-200/70 text-xs mb-2">Custom (seconds): <span {...NT}>{exportConfig.duration}</span></label>
-                        <input type="number" value={exportConfig.duration} onChange={(e) => setExportConfig(pr => ({ ...pr, duration: parseInt(e.target.value) || 60 }))} className="w-full bg-slate-900 text-yellow-200 px-4 py-3 rounded-lg text-sm border-2 border-yellow-400/30 focus:border-yellow-400" min="10" max="28800" />
-                        <p className="text-xs text-yellow-200/60 mt-2">Range: <span {...NT}>10</span> seconds to <span {...NT}>8</span> hours</p>
+                        <p style={{ color: '#fef08a', fontWeight: 700, fontSize: '18px', marginBottom: '4px', margin: '0 0 4px 0' }}>Export is a Pro feature</p>
+                        <p style={{ fontSize: '14px', color: '#94a3b8', margin: 0 }}>Upgrade to export unlimited audio in WAV 24-bit or MP3 at any duration.</p>
                       </div>
-                    </div>
-                    {Notification.permission !== 'granted' && (
-                      <button onClick={requestNotificationPermission} className="w-full bg-gradient-to-r from-slate-800 to-slate-700 text-white px-5 py-3 rounded-lg font-semibold transition-all duration-300 hover:from-yellow-400 hover:to-yellow-300 hover:text-black border-2 border-yellow-400/30 hover:border-yellow-500 flex items-center justify-center gap-2 text-sm shadow-md">
-                        🔔 Enable notifications (recommended for long exports)
+                      <div style={{ width: '100%', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', textAlign: 'left' }}>
+                        <div style={{ borderRadius: '12px', padding: '16px', background: 'rgba(30,41,59,0.7)', border: '2px solid rgba(71,85,105,0.5)' }}>
+                          <p style={{ fontWeight: 700, fontSize: '12px', marginBottom: '8px', color: '#cbd5e1', margin: '0 0 8px 0' }}>FREE</p>
+                          <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <li style={{ display: 'flex', gap: '8px', fontSize: '12px', color: '#94a3b8' }}><span style={{ color: '#64748b' }}>•</span>10 min sessions</li>
+                            <li style={{ display: 'flex', gap: '8px', fontSize: '12px', color: '#94a3b8' }}><span style={{ color: '#f87171' }}>✕</span><span style={{ color: '#64748b' }}>No export</span></li>
+                          </ul>
+                        </div>
+                        <div style={{ borderRadius: '12px', padding: '16px', position: 'relative', background: 'rgba(250,204,21,0.1)', border: '2px solid rgba(250,204,21,0.6)' }}>
+                          <div style={{ position: 'absolute', borderRadius: '9999px', top: '-10px', left: '50%', transform: 'translateX(-50%)', background: '#facc15', color: '#000', fontSize: '0.65rem', fontWeight: 700, padding: '2px 8px', whiteSpace: 'nowrap' }}>RECOMMENDED</div>
+                          <p style={{ fontWeight: 700, fontSize: '12px', marginBottom: '4px', color: '#fde047', margin: '0 0 4px 0' }}>PRO</p>
+                          <p style={{ fontSize: '12px', fontWeight: 600, marginBottom: '8px', color: 'rgba(250,204,21,0.8)', margin: '0 0 8px 0' }}>9.99€/month</p>
+                          <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <li style={{ display: 'flex', gap: '8px', fontSize: '12px', color: '#e2e8f0' }}><span style={{ color: '#facc15' }}>✓</span>Unlimited sessions</li>
+                            <li style={{ display: 'flex', gap: '8px', fontSize: '12px', color: '#e2e8f0' }}><span style={{ color: '#facc15' }}>✓</span>Unlimited exports</li>
+                          </ul>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => window.location.href = `https://buy.stripe.com/test_9B6cN5eKfeBZ3OCfPH4gg00?success_url=${encodeURIComponent(window.location.origin + '?upgraded=true')}`}
+                        style={{ width: '100%', padding: '16px', borderRadius: '12px', fontWeight: 700, fontSize: '18px', background: 'linear-gradient(to right,#facc15,#fde047)', color: '#000', border: '2px solid rgba(234,179,8,0.5)', boxShadow: '0 4px 6px rgba(250,204,21,0.3)', cursor: 'pointer', transition: 'all 0.3s' }}
+                      >
+                        ⚡ Upgrade to Pro — 9.99€/month
                       </button>
-                    )}
-                    {notificationsEnabled && (
-                      <div className="bg-green-500/10 border-2 border-green-400/30 rounded-lg p-4">
-                        <p className="text-green-200 text-xs text-center">✅ Notifications enabled - You'll be notified when export completes</p>
+                    </div>
+                  ) : (
+                    <>
+                      <div style={{ padding: '20px', borderRadius: '8px', background: 'rgba(30,41,59,0.5)', border: '2px solid rgba(250,204,21,0.2)' }}>
+                        <label style={{ display: 'block', color: '#fef08a', fontWeight: 500, fontSize: '14px', marginBottom: '12px' }}>Quality</label>
+                        <select
+                          value={exportConfig.format}
+                          onChange={(e) => setExportConfig(pr => ({ ...pr, format: e.target.value }))}
+                          style={{ width: '100%', padding: '12px 16px', borderRadius: '8px', fontSize: '14px', background: '#0f172a', color: '#fef9c3', border: '2px solid rgba(250,204,21,0.3)', outline: 'none', boxSizing: 'border-box' }}
+                        >
+                          <option value="wav24_44">WAV 24-bit / 44.1kHz</option>
+                          <option value="wav24_48">WAV 24-bit / 48kHz</option>
+                          <option value="mp3_320">MP3 / 320 kbps</option>
+                          <option value="mp3_256">MP3 / 256 kbps</option>
+                          <option value="mp3_192">MP3 / 192 kbps</option>
+                          <option value="mp3_160">MP3 / 160 kbps</option>
+                          <option value="mp3_128">MP3 / 128 kbps</option>
+                        </select>
                       </div>
-                    )}
-                    <button onClick={expSound} disabled={isGenerating} className="w-full bg-gradient-to-r from-yellow-400 to-yellow-300 hover:from-yellow-300 hover:to-yellow-200 text-black px-6 py-4 rounded-xl font-bold transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3 border-2 border-yellow-500/50 shadow-lg hover:shadow-yellow-400/50 text-lg">
-                      {isGenerating ? (<><div className="w-5 h-5 border-2 border-black/30 border-t-black rounded-full animate-spin" />Exporting...</>) : (<><Download className="w-6 h-6" />Export</>)}
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
+                      <div style={{ padding: '20px', borderRadius: '8px', background: 'rgba(30,41,59,0.5)', border: '2px solid rgba(250,204,21,0.2)' }}>
+                        <label style={{ display: 'block', color: '#fef08a', fontWeight: 500, fontSize: '14px', marginBottom: '12px' }}>Duration</label>
+                        <ExportDurationButtons format={exportConfig.format} />
+                        <div>
+                          <label style={{ display: 'block', fontSize: '12px', marginBottom: '8px', color: 'rgba(254,240,138,0.7)' }}>Custom (seconds): <span {...NT}>{exportConfig.duration}</span></label>
+                          <input
+                            type="number"
+                            value={exportConfig.duration}
+                            onChange={(e) => setExportConfig(pr => ({ ...pr, duration: parseInt(e.target.value) || 60 }))}
+                            style={{ width: '100%', padding: '12px 16px', borderRadius: '8px', fontSize: '14px', background: '#0f172a', color: '#fef9c3', border: '2px solid rgba(250,204,21,0.3)', outline: 'none', boxSizing: 'border-box' }}
+                            min="10" max="28800"
+                          />
+                          <p style={{ fontSize: '12px', marginTop: '8px', color: 'rgba(254,240,138,0.6)', margin: '8px 0 0 0' }}>Range: <span {...NT}>10</span> seconds to <span {...NT}>8</span> hours</p>
+                        </div>
+                      </div>
+                      {Notification.permission !== 'granted' && (
+                        <button onClick={requestNotificationPermission} style={{ width: '100%', padding: '12px 20px', borderRadius: '8px', fontWeight: 600, fontSize: '14px', background: 'linear-gradient(to right,#1e293b,#0f172a)', color: '#fff', border: '2px solid rgba(250,204,21,0.3)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', transition: 'all 0.3s', boxSizing: 'border-box' }}>
+                          🔔 Enable notifications (recommended for long exports)
+                        </button>
+                      )}
+                      {notificationsEnabled && (
+                        <div style={{ borderRadius: '8px', padding: '16px', background: 'rgba(34,197,94,0.1)', border: '2px solid rgba(74,222,128,0.3)' }}>
+                          <p style={{ fontSize: '12px', textAlign: 'center', color: '#bbf7d0', margin: 0 }}>✅ Notifications enabled - You'll be notified when export completes</p>
+                        </div>
+                      )}
+                      <button
+                        onClick={expSound}
+                        disabled={isGenerating}
+                        style={{ width: '100%', padding: '16px 24px', borderRadius: '12px', fontWeight: 700, fontSize: '18px', background: 'linear-gradient(to right,#facc15,#fde047)', color: '#000', border: '2px solid rgba(234,179,8,0.5)', boxShadow: '0 4px 6px rgba(250,204,21,0.3)', cursor: isGenerating ? 'not-allowed' : 'pointer', opacity: isGenerating ? 0.5 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', transition: 'all 0.3s', boxSizing: 'border-box' }}
+                      >
+                        {isGenerating
+                          ? (<><div style={{ width: '20px', height: '20px', border: '2px solid rgba(0,0,0,0.3)', borderTopColor: '#000', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />Exporting...</>)
+                          : (<><Download style={{ width: '24px', height: '24px' }} />Export</>)
+                        }
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+
+            </div>
           </div>
 
-          {/* ===================== EXPORT PROGRESS ===================== */}
+          {/* EXPORT PROGRESS BAR */}
           {(exportProgress.stage !== '' || exportProgress.percentage === 100) && (
             <ExportProgressBar exportProgress={exportProgress} formatTime={formatTime} NT={NT} />
           )}
-          {/* ===================== END EXPORT PROGRESS ===================== */}
+
+          {/* FADE OUT WARNING BANNER */}
+          {isFadingOut && isLimited && (
+            <div style={{
+              margin: '0 32px 0 32px',
+              padding: '12px 20px',
+              borderRadius: '12px',
+              background: 'linear-gradient(90deg, rgba(250,204,21,0.15), rgba(234,179,8,0.1))',
+              border: '1px solid rgba(250,204,21,0.5)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '12px',
+              animation: 'pulse 2s ease-in-out infinite',
+            }}>
+              <p style={{ fontSize: '13px', color: '#fef08a', margin: 0 }}>
+                ⏳ <strong>Sesión terminando...</strong> El audio se está desvaneciendo. Actualiza a Pro para continuar.
+              </p>
+              <button
+                onClick={() => { window.location.href = `https://buy.stripe.com/test_9B6cN5eKfeBZ3OCfPH4gg00?success_url=${encodeURIComponent(window.location.origin + '?upgraded=true')}`; }}
+                style={{ padding: '6px 14px', borderRadius: '8px', background: '#facc15', color: '#000', border: 'none', fontWeight: 700, fontSize: '12px', cursor: 'pointer', whiteSpace: 'nowrap' }}
+              >
+                ⚡ Upgrade
+              </button>
+            </div>
+          )}
 
           {/* PLAY/STOP BUTTON */}
-          <div className="p-6 border-t border-yellow-400/20 bg-gradient-to-t from-slate-950/50 to-slate-900/50">
+          <div style={{ padding: '24px 32px', borderTop: '1px solid rgba(250,204,21,0.2)', background: 'linear-gradient(to top,rgba(2,6,23,0.5),rgba(15,23,42,0.5))' }}>
             <button
               onClick={play}
               disabled={isGenerating || isTransitioning}
-              className={`w-full py-4 px-4 rounded-xl font-bold transition-all duration-300 flex items-center justify-center gap-3 text-lg border-2 shadow-lg ${
-                isPlaying
-                  ? 'bg-gradient-to-r from-red-600 to-red-500 hover:from-red-700 hover:to-red-600 text-white border-red-500/50 shadow-red-500/30'
-                  : 'bg-gradient-to-r from-yellow-400 to-yellow-300 hover:from-yellow-300 hover:to-yellow-200 text-black border-yellow-500/50 shadow-yellow-400/50'
-              } disabled:opacity-50 disabled:cursor-not-allowed`}
+              style={isPlaying ? {
+                width: '100%',
+                padding: '16px',
+                borderRadius: '12px',
+                fontWeight: 700,
+                fontSize: '18px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '12px',
+                cursor: isGenerating || isTransitioning ? 'not-allowed' : 'pointer',
+                opacity: isGenerating || isTransitioning ? 0.5 : 1,
+                transition: 'all 0.3s',
+                background: 'linear-gradient(to right,#dc2626,#ef4444)',
+                color: '#fff',
+                border: '2px solid rgba(239,68,68,0.5)',
+                boxShadow: '0 4px 6px rgba(239,68,68,0.3)',
+                boxSizing: 'border-box',
+              } : {
+                width: '100%',
+                padding: '16px',
+                borderRadius: '12px',
+                fontWeight: 700,
+                fontSize: '18px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '12px',
+                cursor: isGenerating || isTransitioning ? 'not-allowed' : 'pointer',
+                opacity: isGenerating || isTransitioning ? 0.5 : 1,
+                transition: 'all 0.3s',
+                background: 'linear-gradient(to right,#facc15,#fde047)',
+                color: '#000',
+                border: '2px solid rgba(234,179,8,0.5)',
+                boxShadow: '0 4px 6px rgba(250,204,21,0.5)',
+                boxSizing: 'border-box',
+              }}
             >
-              {isGenerating ? (<><div className="w-5 h-5 border-2 border-black/30 border-t-black rounded-full animate-spin" />Preparing...</>) : isPlaying ? (<><Square className="w-6 h-6" />Stop</>) : (<><Play className="w-6 h-6" />Play</>)}
+              {isGenerating
+                ? (<><div style={{ width: '20px', height: '20px', border: '2px solid rgba(0,0,0,0.3)', borderTopColor: '#000', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />Preparing...</>)
+                : isPlaying
+                  ? (<><Square style={{ width: '24px', height: '24px' }} />Stop</>)
+                  : (<><Play style={{ width: '24px', height: '24px' }} />Play</>)
+              }
             </button>
-            {!simpleMode && (
-              <div className="mt-3 text-xs text-yellow-200/60 text-center">✨ All changes update in real-time while playing</div>
-            )}
+            <div style={{ marginTop: '12px', fontSize: '12px', textAlign: 'center', color: 'rgba(254,240,138,0.6)' }}>✨ All changes update in real-time while playing</div>
+          </div>
+
+      </div>
+
+      {/* FREE LIMIT MODAL */}
+      {showLimitModal && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)' }}>
+          <div style={{ borderRadius: '16px', padding: '32px', width: '90%', maxWidth: '512px', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', background: '#0f172a', border: '2px solid rgba(250,204,21,0.4)', boxShadow: '0 25px 50px rgba(0,0,0,0.5)' }}>
+            <h2 style={{ fontSize: '24px', fontWeight: 700, marginBottom: '24px', width: '100%', textAlign: 'center', color: '#facc15', margin: '0 0 24px 0' }}>⏳ Free Limit Reached</h2>
+            <div style={{ width: '100%', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '24px' }}>
+              <div style={{ borderRadius: '12px', padding: '16px', textAlign: 'left', background: 'rgba(30,41,59,0.7)', border: '2px solid rgba(71,85,105,0.5)' }}>
+                <p style={{ fontWeight: 700, fontSize: '14px', marginBottom: '12px', color: '#cbd5e1', margin: '0 0 12px 0' }}>FREE</p>
+                <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <li style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', fontSize: '12px', color: '#94a3b8' }}><span style={{ color: '#64748b' }}>•</span>10 minute sessions</li>
+                  <li style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', fontSize: '12px', color: '#94a3b8' }}><span style={{ color: '#f87171' }}>✕</span><span style={{ color: '#64748b' }}>No export</span></li>
+                </ul>
+              </div>
+              <div style={{ borderRadius: '12px', padding: '16px', textAlign: 'left', position: 'relative', background: 'rgba(250,204,21,0.1)', border: '2px solid rgba(250,204,21,0.6)' }}>
+                <div style={{ position: 'absolute', borderRadius: '9999px', top: '-10px', left: '50%', transform: 'translateX(-50%)', background: '#facc15', color: '#000', fontSize: '0.65rem', fontWeight: 700, padding: '2px 10px', whiteSpace: 'nowrap' }}>RECOMMENDED</div>
+                <p style={{ fontWeight: 700, fontSize: '14px', marginBottom: '4px', color: '#fde047', margin: '0 0 4px 0' }}>PRO</p>
+                <p style={{ fontSize: '12px', fontWeight: 600, marginBottom: '12px', color: 'rgba(250,204,21,0.8)', margin: '0 0 12px 0' }}>9.99€ / month</p>
+                <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <li style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', fontSize: '12px', color: '#e2e8f0' }}><span style={{ color: '#facc15' }}>✓</span>Unlimited sessions</li>
+                  <li style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', fontSize: '12px', color: '#e2e8f0' }}><span style={{ color: '#facc15' }}>✓</span>Unlimited exports</li>
+                  <li style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', fontSize: '12px', color: '#e2e8f0' }}><span style={{ color: '#facc15' }}>✓</span>Full generator access</li>
+                </ul>
+              </div>
+            </div>
+            <button
+              onClick={() => window.location.href = `https://buy.stripe.com/test_9B6cN5eKfeBZ3OCfPH4gg00?success_url=${encodeURIComponent(window.location.origin + '?upgraded=true')}`}
+              style={{ width: '100%', padding: '16px', borderRadius: '12px', fontWeight: 700, fontSize: '18px', textAlign: 'center', background: 'linear-gradient(to right,#facc15,#fde047)', color: '#000', border: '2px solid rgba(234,179,8,0.5)', boxShadow: '0 4px 6px rgba(250,204,21,0.3)', cursor: 'pointer', transition: 'all 0.3s', boxSizing: 'border-box' }}
+            >
+              ⚡ Upgrade to Pro — 9.99€/month
+            </button>
+            <button
+              onClick={() => setShowLimitModal(false)}
+              style={{ marginTop: '16px', fontSize: '14px', color: '#64748b', background: 'transparent', border: 'none', cursor: 'pointer' }}
+            >
+              Continue in Free
+            </button>
           </div>
         </div>
-      </div>
+      )}
+
     </div>
   );
 };
