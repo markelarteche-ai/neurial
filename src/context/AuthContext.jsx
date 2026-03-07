@@ -3,7 +3,14 @@ import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(
   import.meta.env.VITE_SUPABASE_URL,
-  import.meta.env.VITE_SUPABASE_ANON_KEY
+  import.meta.env.VITE_SUPABASE_ANON_KEY,
+  {
+    auth: {
+      detectSessionInUrl: true,
+      persistSession: true,
+      autoRefreshToken: true,
+    }
+  }
 );
 
 const AuthContext = createContext(null);
@@ -28,6 +35,7 @@ export const AuthProvider = ({ children }) => {
       setUser(data.user);
       setIsPro(data.isPro ?? false);
     } catch {
+      setUser(session.user ?? null);
       setIsPro(false);
     } finally {
       setLoading(false);
@@ -35,28 +43,24 @@ export const AuthProvider = ({ children }) => {
   };
 
   useEffect(() => {
+    // Register onAuthStateChange BEFORE getSession so it catches the hash token on magic link redirect
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        checkSession(session);
+        // Clean hash from URL after magic link login
+        if (event === 'SIGNED_IN' && window.location.hash.includes('access_token')) {
+          window.history.replaceState(null, '', window.location.pathname);
+        }
+      }
+    );
 
-  const initSession = async () => {
-    const { data } = await supabase.auth.getSession();
-    checkSession(data.session);
-  };
-
-  initSession();
-
-  const { data: { subscription } } = supabase.auth.onAuthStateChange(
-    (_event, session) => {
-      checkSession(session);
-    }
-  );
-
-  return () => subscription.unsubscribe();
-
-}, []);
+    return () => subscription.unsubscribe();
+  }, []);
 
   const signIn = (email) =>
     supabase.auth.signInWithOtp({
       email,
-      options: { emailRedirectTo: "https://neurial.dev" }
+      options: { emailRedirectTo: 'https://neurial.dev' }
     });
 
   const signOut = () => supabase.auth.signOut();
