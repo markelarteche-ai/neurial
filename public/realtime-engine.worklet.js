@@ -1396,10 +1396,10 @@ class RealtimeEngine extends AudioWorkletProcessor {
       const targetIntensity = intensity;
       const targetVolume = volume;
 
-      filters.smoothedTexture += (textureAmountPre - filters.smoothedTexture) * 0.004;
+      filters.smoothedTexture += (textureAmountPre - filters.smoothedTexture) * 0.02;
       const texAmt = filters.smoothedTexture;
 
-      this.densityRamp[color] += (targetIntensity - this.densityRamp[color]) * 0.01;
+      this.densityRamp[color] += (targetIntensity - this.densityRamp[color]) * 0.08;
       const rampRaw = Math.max(0, Math.min(1, this.densityRamp[color]));
       const densitySmooth = rampRaw * rampRaw * (3 - 2 * rampRaw);
 

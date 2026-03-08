@@ -634,11 +634,8 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
           startPlayer(1, t0);
           scheduleNextCrossfade(t0, 1);
         };
-        if (ctx.state === 'suspended') {
-          ctx.resume().then(schedulePlay).catch(err => console.error(`[nature] ${soundKey}: resume failed`, err));
-        } else {
-          schedulePlay();
-        }
+        // Always try resume first on mobile — context may have been suspended after fetch/decode
+        ctx.resume().then(schedulePlay).catch(() => schedulePlay());
       })
       .catch(err => {
         delete natureAudioRefs.current[soundKey];
@@ -777,6 +774,18 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
       }
 
       syncAllRealtimeParams(ctx);
+
+      // Mobile fix: worklet processor may not be ready immediately after addModule.
+      // Re-sync params after short delays to ensure they land when the worklet is active.
+      setTimeout(() => syncAllRealtimeParams(ctx), 100);
+      setTimeout(() => syncAllRealtimeParams(ctx), 500);
+      setTimeout(() => {
+        syncAllRealtimeParams(ctx);
+        // Kick the gain node to wake up the audio graph on iOS/Android
+        if (gainNodeRef.current && ctx.state === 'running') {
+          gainNodeRef.current.gain.setValueAtTime(1, ctx.currentTime);
+        }
+      }, 1000);
 
       setIsPlaying(true);
       isPlayingRef.current = true;
