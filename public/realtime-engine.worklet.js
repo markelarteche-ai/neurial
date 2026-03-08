@@ -1,4 +1,4 @@
-// REALTIME AUDIO ENGINE WORKLET - SILENCE-SAFE ARCHITECTURE v5.3
+// REALTIME AUDIO ENGINE WORKLET - SILENCE-SAFE ARCHITECTURE v5.9m
 // Hermetic DSP pipeline: Silence → Silence (mathematically exact)
 // Preserves all sonic characteristics, spatial imaging, and tonal balance
 // Psychoacoustic refinements: deterministic drift, reduced grain, spectral breathing,
@@ -17,6 +17,9 @@
 //         air/grain rng halved on mobile, redundant depth filter pass removed
 // v5.8m: airFilter biquads bypassed on mobile, spectralBreathing skipped on mobile,
 //         grain collapsed to 2 rng on mobile, genGreenBed skipped on mobile
+// v5.9m: spectral biquads 4→1 on mobile (75% filter cost reduction — root cause fix),
+//         spatial delay buffer skipped on mobile, greenFill abs() skipped on mobile,
+//         grain skipped below texture 0.15 on mobile, greenGrain skipped on mobile
 // ============================================================================
 
 // ================= BIQUAD FILTER CLASS =================
@@ -474,9 +477,19 @@ class ColorSignature {
     let sigL = sampleL;
     let sigR = sampleR;
 
-    for (let i = 0; i < 4; i++) {
-      sigL = this.spectralL[i].process(sigL);
-      sigR = this.spectralR[i].process(sigR);
+    // v5.9m: on mobile use only spectral[0] (the most characteristic filter per color).
+    // Reduces from 4 biquad calls × 2ch to 1 × 2ch per layer per sample.
+    // With 8 active layers this cuts spectral filter cost by 75% — the dominant CPU cost.
+    // spectral[0] per color: white=HP80, pink=HP90, brown=LP200, black=LP170,
+    // blue=HP950, violet=HP650, grey=HP120, green=BandPass500 — all perceptually critical.
+    if (this.isMobile) {
+      sigL = this.spectralL[0].process(sigL);
+      sigR = this.spectralR[0].process(sigR);
+    } else {
+      for (let i = 0; i < 4; i++) {
+        sigL = this.spectralL[i].process(sigL);
+        sigR = this.spectralR[i].process(sigR);
+      }
     }
 
     // Micro spectral tilt
@@ -525,21 +538,27 @@ class ColorSignature {
     const finalWidth = width * widthBias;
     const delayOffset = this.getSpatialDelayOffset();
 
-    // Micro delay decorrelation
-    this.spatialDelayL[this.spatialPos] = sigL;
-    this.spatialDelayR[this.spatialPos] = sigR;
-
-    const delayedL = this.spatialDelayL[(this.spatialPos - delayOffset + 512) % 512];
-    const delayedR = this.spatialDelayR[(this.spatialPos - delayOffset + 512) % 512];
-
-    this.spatialPos = (this.spatialPos + 1) % 512;
-
-    // v5.5m: on mobile, skip allpass biquads (identity passthrough).
+    // v5.9m: on mobile skip the spatial delay buffer entirely.
+    // The 512-sample circular buffer write+read+modulo per layer = 6 array ops/sample.
+    // With 8 active layers = 48 array ops/sample causing cache pressure.
+    // Allpass was already skipped in v5.5m. Without the delay, spatial decorr
+    // comes entirely from the mid/side width matrix below (perceptually dominant).
     let apL, apR;
     if (this.isMobile) {
       apL = sigL;
       apR = sigR;
+      // Still advance spatialPos so state stays coherent if switching to desktop
+      this.spatialPos = (this.spatialPos + 1) % 512;
     } else {
+      // Micro delay decorrelation
+      this.spatialDelayL[this.spatialPos] = sigL;
+      this.spatialDelayR[this.spatialPos] = sigR;
+
+      const delayedL = this.spatialDelayL[(this.spatialPos - delayOffset + 512) % 512];
+      const delayedR = this.spatialDelayR[(this.spatialPos - delayOffset + 512) % 512];
+
+      this.spatialPos = (this.spatialPos + 1) % 512;
+
       apL = this.allpassL.process(sigL);
       apR = this.allpassR.process(sigR);
     }
@@ -548,8 +567,14 @@ class ColorSignature {
     const mid = (sigL + sigR) * 0.5;
     const side = (sigL - sigR) * 0.5 * finalWidth;
 
-    sigL = mid + side + (apL - mid) * finalWidth * 0.3;
-    sigR = mid - side + (apR - mid) * finalWidth * 0.3;
+    if (this.isMobile) {
+      // No delay-based decorrelation on mobile — pure M/S matrix
+      sigL = mid + side;
+      sigR = mid - side;
+    } else {
+      sigL = mid + side + (apL - mid) * finalWidth * 0.3;
+      sigR = mid - side + (apR - mid) * finalWidth * 0.3;
+    }
 
     // 4. AIR SIGNATURE - gated by airGate
     // v5.5m: on mobile, use single rng() per channel
@@ -608,7 +633,9 @@ class RealtimeEngine extends AudioWorkletProcessor {
     // ================= NOISE BUFFERS =================
     this.noiseBuffers = {};
     ['white', 'pink', 'brown', 'grey', 'blue', 'violet', 'black', 'green'].forEach(c => {
-      this.noiseBuffers[c] = { L: new Float32Array(128), R: new Float32Array(128), pos: 0 };
+      // v5.9m BUG FIX: size 1024 to handle Android blockSize (128/256/512/1024).
+      // Original 128 caused reads beyond the buffer when blockSize > 128 → distortion.
+      this.noiseBuffers[c] = { L: new Float32Array(1024), R: new Float32Array(1024), pos: 0 };
     });
 
     // ================= PINK NOISE STATE =================
@@ -1541,7 +1568,7 @@ class RealtimeEngine extends AudioWorkletProcessor {
         sp.volume    += (targetVolume    - sp.volume)    * 0.224;
       }
 
-      for (let i = 0; i < 128; i++) {
+      for (let i = 0; i < blockSize; i++) {
         if (!this.isMobile) {
           sp.intensity += (targetIntensity - sp.intensity) * 0.002;
           sp.volume    += (targetVolume    - sp.volume)    * 0.002;
@@ -1605,16 +1632,22 @@ class RealtimeEngine extends AudioWorkletProcessor {
           case 'green':
             sampleL = this.genGreen('L');
             sampleR = this.genGreen('R');
-            // v5.8m: skip genGreenBed on mobile — bedGain is ≤0.14 and
-            // inaudible in a dense mix. Saves 4 IIR updates + 1 rng/sample.
+            // v5.8m: skip genGreenBed on mobile
             if (!this.isMobile) {
               const bedFade = Math.pow(1.0 - Math.min(1.0, texAmt), 0.85);
               const bedGain = 0.14 * bedFade;
               sampleL += this.genGreenBed('L') * bedGain;
               sampleR += this.genGreenBed('R') * bedGain;
             }
-            this.greenFill.L = this.greenFill.L * 0.995 + Math.abs(sampleL) * 0.005;
-            this.greenFill.R = this.greenFill.R * 0.995 + Math.abs(sampleR) * 0.005;
+            // v5.9m: on mobile skip Math.abs() energy tracking — use fixed small
+            // constant (0.01) instead. greenFill only modulates grain subtly.
+            if (this.isMobile) {
+              this.greenFill.L = 0.01;
+              this.greenFill.R = 0.01;
+            } else {
+              this.greenFill.L = this.greenFill.L * 0.995 + Math.abs(sampleL) * 0.005;
+              this.greenFill.R = this.greenFill.R * 0.995 + Math.abs(sampleR) * 0.005;
+            }
             sampleL += (this.rng() - this.rng()) * this.greenFill.L * 0.11;
             sampleR += (this.rng() - this.rng()) * this.greenFill.R * 0.11;
 
@@ -1740,12 +1773,14 @@ class RealtimeEngine extends AudioWorkletProcessor {
           const grainRamp = Math.max(0, (textureAmount - 0.01) / 0.99);
           const grainIntensity = grainRamp * 1.4;
 
-          // v5.7m: on mobile use 4 rng() for grain instead of 10
-          // v5.8m: further collapsed to 2 rng() on mobile
+          // v5.9m: on mobile skip grain below 0.15 (inaudible at low texture).
+          // Above 0.15 use 2 rng (same as v5.8m). Saves 2 rng/sample on most layers.
           if (this.isMobile) {
-            const g = this.rng() * grainIntensity * 0.20;
-            totalGrainL = g;
-            totalGrainR = this.rng() * grainIntensity * 0.20;
+            if (textureAmount > 0.15) {
+              const g = this.rng() * grainIntensity * 0.20;
+              totalGrainL = g;
+              totalGrainR = this.rng() * grainIntensity * 0.20;
+            }
           } else {
             const grain1L = (this.rng() - this.rng()) * grainIntensity * 0.15;
             const grain1R = (this.rng() - this.rng()) * grainIntensity * 0.15;
@@ -1758,7 +1793,8 @@ class RealtimeEngine extends AudioWorkletProcessor {
           }
         }
 
-        if (color === 'green' && textureAmount > 0.01) {
+        // v5.9m: skip greenGrain on mobile (saves 2 IIR + 1 rng + Math.sin/16 per sample)
+        if (!this.isMobile && color === 'green' && textureAmount > 0.01) {
           const greenOrganicL = this.genGreenGrain('L', textureAmount);
           const greenOrganicR = this.genGreenGrain('R', textureAmount);
           totalGrainL = totalGrainL * 0.5 + greenOrganicL * 0.5;
@@ -1810,12 +1846,11 @@ class RealtimeEngine extends AudioWorkletProcessor {
       const BASE_GAIN = 0.70;
       const gain = sp.intensity * sp.volume * BASE_GAIN * onRamp * psyGainBias * mixComp;
       for (let i = 0; i < blockSize; i++) {
-        const idx = (buf.pos + i) % 128;
-        L[i] += buf.L[idx] * gain;
-        R[i] += buf.R[idx] * gain;
+        L[i] += buf.L[i] * gain;
+        R[i] += buf.R[i] * gain;
       }
 
-      buf.pos = (buf.pos + blockSize) % 128;
+      // buf.pos no longer used — removed in v5.9m blockSize fix
     });
 
     // ================= BRAINWAVES - SILENCE SAFE =================
