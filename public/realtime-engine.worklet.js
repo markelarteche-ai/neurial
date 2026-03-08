@@ -550,6 +550,16 @@ class RealtimeEngine extends AudioWorkletProcessor {
     this.decorrelationPos = 0;
     this.spatialDriftPhase = 0;
 
+    // ── Speaker protection high-pass filter ──────────────────────────────
+    // Activated when no headphones detected — cuts below 90Hz to prevent
+    // speaker distortion on small mobile drivers.
+    // Two 1-pole HP filters in series (12dB/oct) per channel — cheap and effective.
+    this._speakerMode = false;  // toggled by React via port message
+    this._hpL1 = 0; this._hpL2 = 0;  // HP filter state L
+    this._hpR1 = 0; this._hpR2 = 0;  // HP filter state R
+    // Coefficient for 90Hz HP at 44100Hz: c = exp(-2π*90/44100)
+    this._hpCoeff = Math.exp(-2 * Math.PI * 90 / sampleRate);
+
     this.diffuseDelays = {
       L1: new Float32Array(384), L2: new Float32Array(512),
       R1: new Float32Array(448), R2: new Float32Array(576),
@@ -633,6 +643,10 @@ class RealtimeEngine extends AudioWorkletProcessor {
     };
 
     this.port.onmessage = (e) => {
+      if (e.data.type === 'speakerMode') {
+        this._speakerMode = !!e.data.active;
+        return;
+      }
       if (e.data.type === 'setWaveMelody') {
         const { wave, melody } = e.data;
         if (this.melodyConfigs[wave] !== undefined) this.melodyConfigs[wave] = melody;
@@ -1635,6 +1649,27 @@ class RealtimeEngine extends AudioWorkletProcessor {
       for (let i = 0; i < blockSize; i++) {
         if (L[i] !== 0) L[i] *= master;
         if (R[i] !== 0) R[i] *= master;
+      }
+    }
+
+    // ── Speaker protection HP filter ─────────────────────────────────────
+    // Active when _speakerMode = true (no headphones detected).
+    // Two cascaded 1-pole HP filters per channel → 12dB/oct rolloff below 90Hz.
+    // Formula: y[n] = c * (y[n-1] + x[n] - x[n-1])  where c = exp(-2π*fc/sr)
+    if (this._speakerMode) {
+      const c = this._hpCoeff;
+      let prevL = L[0], prevR = R[0];
+      for (let i = 0; i < blockSize; i++) {
+        const inL = L[i], inR = R[i];
+        // First pole
+        this._hpL1 = c * (this._hpL1 + inL - prevL);
+        this._hpR1 = c * (this._hpR1 + inR - prevR);
+        prevL = inL; prevR = inR;
+        // Second pole
+        this._hpL2 = c * (this._hpL2 + this._hpL1 - (i > 0 ? L[i-1] : this._hpL1));
+        this._hpR2 = c * (this._hpR2 + this._hpR1 - (i > 0 ? R[i-1] : this._hpR1));
+        L[i] = this._hpL1;
+        R[i] = this._hpR1;
       }
     }
 

@@ -309,6 +309,7 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
   };
 
   const [activeTab, setActiveTab] = useState('layers');
+  const [speakerMode, setSpeakerMode] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isTransitioning, setIsTransitioning] = useState(false);
@@ -383,6 +384,31 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
     nightforest: { enabled: false, volume: 70 },
     nightingale: { enabled: false, volume: 70 }
   });
+
+  useEffect(() => {
+  const checkHeadphones = async () => {
+    if (!mixerNodeRef.current) return;
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const hasHeadphones = devices.some(d =>
+        d.kind === 'audiooutput' &&
+        /headphone|earphone|headset|wired/i.test(d.label)
+      );
+      const active = !hasHeadphones;
+      setSpeakerMode(active);
+      mixerNodeRef.current.port.postMessage({ type: 'speakerMode', active });
+    } catch {
+      const active = /Android|iPhone|iPad|Mobile|HarmonyOS/i.test(navigator.userAgent);
+      setSpeakerMode(active);
+      mixerNodeRef.current?.port.postMessage({ type: 'speakerMode', active });
+    }
+  };
+
+  navigator.mediaDevices?.addEventListener('devicechange', checkHeadphones);
+  if (isPlaying) checkHeadphones();
+
+  return () => navigator.mediaDevices?.removeEventListener('devicechange', checkHeadphones);
+}, [isPlaying]);
 
   const natureSoundsRef = useRef(natureSounds);
   useEffect(() => { natureSoundsRef.current = natureSounds; }, [natureSounds]);
