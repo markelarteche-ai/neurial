@@ -991,7 +991,12 @@ class RealtimeEngine extends AudioWorkletProcessor {
 
     for (let ci = 0; ci < COLORS.length; ci++) {
       const color = COLORS[ci];
-      const intensity = parameters[`${color}_intensity`][0];
+      const intensityParam = parameters[`${color}_intensity`];
+      // Read max value across the parameter array — setValueAtTime may not
+      // have propagated to [0] yet on the first block in mobile browsers
+      const intensity = intensityParam.length > 1
+        ? Math.max(...intensityParam)
+        : intensityParam[0];
       if (intensity > 0.001) {
         hasActiveSound = true;
         activeColors.push(color);
@@ -1018,7 +1023,7 @@ class RealtimeEngine extends AudioWorkletProcessor {
     // ── Pre-compute block-level coefficients ──────────────────────────────
     // FIX: All smoothing coefficients are now functions of blockSize, not hardcoded
     // This ensures identical temporal behavior at blockSize=128 AND blockSize=4096
-    const kDensity = 1 - Math.exp(-blockSize / (sr * 0.5));   // 500ms ramp
+    const kDensity = 1 - Math.exp(-blockSize / (sr * 0.05));  // 50ms ramp — responsive on any blockSize
     const kSp      = 1 - Math.exp(-blockSize / (sr * 0.07));  // 70ms smooth (per block)
     const kTex     = 1 - Math.exp(-blockSize / (sr * 0.25));  // 250ms texture smooth
     const kBrown   = 1 - Math.exp(-blockSize / (sr * 0.07));  // 70ms brown params
@@ -1028,11 +1033,14 @@ class RealtimeEngine extends AudioWorkletProcessor {
     // ── Noise Layers ─────────────────────────────────────────────────────
     for (let ci = 0; ci < COLORS.length; ci++) {
       const color = COLORS[ci];
-      const intensity = parameters[`${color}_intensity`][0];
+      const intensityParam = parameters[`${color}_intensity`];
+      const intensity = intensityParam.length > 1
+        ? Math.max(...intensityParam)
+        : intensityParam[0];
 
       if (intensity < 0.001) {
         this.resetLayerState(color);
-        return;
+        continue;
       }
 
       const volume  = parameters[`${color}_volume`][0];
