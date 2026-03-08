@@ -726,6 +726,7 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
   };
 
   const lastPlayTimestamp = useRef(0);
+  const workletLoadedRef = useRef(false);
 
   const play = async () => {
     const now = Date.now();
@@ -735,7 +736,7 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
     if (isPlaying) return stopSound();
 
     setIsTransitioning(true);
-    setIsGenerating(true);
+    if (!workletLoadedRef.current) setIsGenerating(true);
 
     try {
       // Create context immediately inside user gesture (critical for iOS/Android)
@@ -755,6 +756,7 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
       gainNodeRef.current = masterGain;
 
       await ctx.audioWorklet.addModule('/realtime-engine.worklet.js');
+      workletLoadedRef.current = true;
 
       // After addModule (which is async), iOS may have suspended again — resume again
       if (ctx.state === 'suspended') {
