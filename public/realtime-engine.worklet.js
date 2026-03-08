@@ -155,6 +155,10 @@ class ColorSignature {
     // v5.5m: store mobile flag for use in process()
     this.isMobile = isMobile || false;
 
+    // v5.10m: pre-allocated output slots — avoids array allocation every sample
+    this._sigOutL = 0;
+    this._sigOutR = 0;
+
     // Spectral filters (up to 4 per color, L/R)
     this.spectralL = [new Biquad(), new Biquad(), new Biquad(), new Biquad()];
     this.spectralR = [new Biquad(), new Biquad(), new Biquad(), new Biquad()];
@@ -592,7 +596,10 @@ class ColorSignature {
       }
     }
 
-    return [sigL, sigR];
+    // v5.10m: write results to pre-allocated instance vars instead of returning
+    // a new array every sample — eliminates 132K+ GC-triggering allocations/sec.
+    this._sigOutL = sigL;
+    this._sigOutR = sigR;
   }
 }
 
@@ -1410,26 +1417,29 @@ class RealtimeEngine extends AudioWorkletProcessor {
 
     const sr = sampleRate;
 
-    // ================= CHECK FOR ACTIVE SOUNDS =================
+    // v5.10m: for loops instead of forEach — no closure allocation per block
+    const COLORS = ['white', 'pink', 'brown', 'grey', 'blue', 'violet', 'black', 'green'];
+    const WAVES  = ['alpha', 'theta', 'delta', 'beta', 'gamma'];
+
     let hasActiveSound = false;
     const activeColors = [];
 
-    ['white', 'pink', 'brown', 'grey', 'blue', 'violet', 'black', 'green'].forEach(color => {
+    for (let ci = 0; ci < 8; ci++) {
+      const color = COLORS[ci];
       const intensity = parameters[`${color}_intensity`][0];
       if (intensity > 0.001) {
         hasActiveSound = true;
         activeColors.push(color);
       }
-    });
+    }
 
     let hasActiveBrainwaves = false;
-    ['alpha', 'theta', 'delta', 'beta', 'gamma'].forEach(wave => {
-      const enabled = parameters[`${wave}_enabled`][0];
-      if (enabled > 0.5) {
+    for (let wi = 0; wi < 5; wi++) {
+      if (parameters[`${WAVES[wi]}_enabled`][0] > 0.5) {
         hasActiveSound = true;
         hasActiveBrainwaves = true;
       }
-    });
+    }
 
     if (!hasActiveSound) {
       return true;
@@ -1443,12 +1453,13 @@ class RealtimeEngine extends AudioWorkletProcessor {
     this.updateMicroVar(blockSize, sr);
 
     // ================= NOISE LAYERS WITH COLOR SIGNATURES =================
-    ['white', 'pink', 'brown', 'grey', 'blue', 'violet', 'black', 'green'].forEach(color => {
+    for (let ci = 0; ci < 8; ci++) {
+      const color = COLORS[ci];
       const intensity = parameters[`${color}_intensity`][0];
 
       if (intensity < 0.001) {
         this.resetLayerState(color);
-        return;
+        continue;
       }
 
       const volume = parameters[`${color}_volume`][0];
@@ -1485,14 +1496,21 @@ class RealtimeEngine extends AudioWorkletProcessor {
       const textureAmountPre = Math.max(0, Math.min(1, smoothedTexture * textureScalePre));
 
       if (color === 'brown') {
-        this.brownSmoothed.bass    += (smoothedBass    - this.brownSmoothed.bass)    * 0.002;
-        this.brownSmoothed.texture += (smoothedTexture - this.brownSmoothed.texture) * 0.002;
+        const brownK = 1 - Math.exp(-blockSize / (sr * 1.0)); // ~1s TC
+        this.brownSmoothed.bass    += (smoothedBass    - this.brownSmoothed.bass)    * brownK;
+        this.brownSmoothed.texture += (smoothedTexture - this.brownSmoothed.texture) * brownK;
       }
 
-      filters.smoothedTexture += (textureAmountPre - filters.smoothedTexture) * 0.004;
+      const texK = 1 - Math.exp(-blockSize / (sr * 0.5)); // ~500ms TC
+      filters.smoothedTexture += (textureAmountPre - filters.smoothedTexture) * texK;
       const texAmt = filters.smoothedTexture;
 
-      this.densityRamp[color] += (targetIntensity - this.densityRamp[color]) * 0.01;
+      // v5.10m: blockSize-aware ramp coefficients.
+      // 0.01/block was designed for 128-sample blocks (≈130ms fade-in).
+      // At 4096 samples/block: 0.01/block = 4.2s fade-in → audible tremolo.
+      // Fix: target ~300ms fade-in at any blockSize.
+      const rampK = 1 - Math.exp(-blockSize / (sr * 0.3));
+      this.densityRamp[color] += (targetIntensity - this.densityRamp[color]) * rampK;
       const rampRaw = Math.max(0, Math.min(1, this.densityRamp[color]));
       const densitySmooth = rampRaw * rampRaw * (3 - 2 * rampRaw);
 
@@ -1668,7 +1686,9 @@ class RealtimeEngine extends AudioWorkletProcessor {
         sampleL *= densitySmooth;
         sampleR *= densitySmooth;
 
-        [sampleL, sampleR] = signature.process(sampleL, sampleR, this, textureAmountPre);
+        signature.process(sampleL, sampleR, this, textureAmountPre);
+        sampleL = signature._sigOutL;
+        sampleR = signature._sigOutR;
 
         // ================= DEPTH (BASS) — uses pre-computed block values =================
         const d             = dBlock;
@@ -1803,7 +1823,10 @@ class RealtimeEngine extends AudioWorkletProcessor {
         buf.R[i] = sampleR;
       }
 
-      this.layerOnRamp[color] += (1 - this.layerOnRamp[color]) * 0.05;
+      // v5.10m: blockSize-aware onRamp. 0.05/block = 130ms at 128 samples but
+      // 4.2s at 4096 samples → 92ms gain steps → audible as chisporroteo.
+      const onRampK = 1 - Math.exp(-blockSize / (sr * 0.2));
+      this.layerOnRamp[color] += (1 - this.layerOnRamp[color]) * onRampK;
       const onRamp = this.layerOnRamp[color];
 
       const psyGainBias = this.fatigueDensity * this.psy.density * this.microVar.grainDensity;
@@ -1815,13 +1838,14 @@ class RealtimeEngine extends AudioWorkletProcessor {
       }
 
       // buf.pos no longer used — removed in v5.9m blockSize fix
-    });
+    } // end colors for loop
 
     // ================= BRAINWAVES - SILENCE SAFE =================
     if (hasActiveBrainwaves) {
-      ['alpha', 'theta', 'delta', 'beta', 'gamma'].forEach(wave => {
+      for (let wi = 0; wi < 5; wi++) {
+        const wave = WAVES[wi];
         const enabled = parameters[`${wave}_enabled`][0];
-        if (enabled < 0.5) return;
+        if (enabled < 0.5) continue;
 
         const carrier = parameters[`${wave}_carrier`][0];
         const beat = parameters[`${wave}_beat`][0];
@@ -1878,7 +1902,7 @@ class RealtimeEngine extends AudioWorkletProcessor {
           L[i] += mid + side;
           R[i] += mid - side;
         }
-      });
+      } // end brainwaves for loop
     }
 
     // ================= MIXER FLOOR CLAMP =================
