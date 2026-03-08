@@ -812,13 +812,14 @@ engine.port.onmessage = (e) => {
   if (e.data.type === 'ready') {
     forceParams();
     syncAllRealtimeParams(ctx);
-    // Second sync 200ms later in case AudioContext was briefly suspended
     setTimeout(() => {
       if (mixerNodeRef.current && audioContextRef.current?.state === 'running') {
         forceParams();
         syncAllRealtimeParams(audioContextRef.current);
       }
     }, 200);
+  } else if (e.data.type === 'diagnostics') {
+    console.log('🔍 WORKLET:', JSON.stringify(e.data));
   }
 };
 

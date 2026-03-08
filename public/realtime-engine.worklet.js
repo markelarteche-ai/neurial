@@ -974,6 +974,23 @@ class RealtimeEngine extends AudioWorkletProcessor {
       this.port.postMessage({ type: 'ready' });
     }
 
+    if (!this._diagnostics) {
+  this._diagnostics = { blockSizes: {}, callCount: 0, lastReport: 0 };
+}
+const diag = this._diagnostics;
+diag.callCount++;
+diag.blockSizes[blockSize] = (diag.blockSizes[blockSize] || 0) + 1;
+
+// Report every 2 seconds
+if (diag.callCount % 200 === 0) {
+  this.port.postMessage({
+    type: 'diagnostics',
+    blockSizes: diag.blockSizes,
+    callCount: diag.callCount,
+    sampleRate: sampleRate
+  });
+}
+
     const output = outputs[0];
     const L = output[0];
     const R = output[1];
