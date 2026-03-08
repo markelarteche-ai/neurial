@@ -633,9 +633,10 @@ class RealtimeEngine extends AudioWorkletProcessor {
     // ================= NOISE BUFFERS =================
     this.noiseBuffers = {};
     ['white', 'pink', 'brown', 'grey', 'blue', 'violet', 'black', 'green'].forEach(c => {
-      // v5.9m BUG FIX: size 1024 to handle Android blockSize (128/256/512/1024).
-      // Original 128 caused reads beyond the buffer when blockSize > 128 → distortion.
-      this.noiseBuffers[c] = { L: new Float32Array(1024), R: new Float32Array(1024), pos: 0 };
+      // v5.9m BUG FIX: size 8192 to handle any Android/HarmonyOS blockSize.
+      // HarmonyOS (Honor/Huawei) uses 4096-8192 sample buffers via audio HAL.
+      // Original 128 → distortion; 1024 → still too small for HarmonyOS.
+      this.noiseBuffers[c] = { L: new Float32Array(8192), R: new Float32Array(8192), pos: 0 };
     });
 
     // ================= PINK NOISE STATE =================
@@ -1467,13 +1468,22 @@ class RealtimeEngine extends AudioWorkletProcessor {
       const filters = this.layerFilters[color];
       const signature = this.colorSignatures[color];
 
+      // v5.9m FIX: compute smoothing coefficients from actual blockSize.
+      // Previously hardcoded 0.224 = 1-(1-0.002)^128, which is correct ONLY for
+      // blockSize=128. On HarmonyOS/Android the block can be 512, 1024, 4096, or 8192.
+      // At blockSize=4096: k=0.9997 → instant snap → audible click on every param change.
+      // Formula: 1-(1-perSampleK)^blockSize, clamped to 0.95 to prevent snap.
+      const kBlock = this.isMobile
+        ? Math.min(0.95, 1 - Math.pow(1 - 0.002, blockSize))
+        : 0.008;
+
       // v5.8m: smooth bass and texture FIRST — must happen before textureAmountPre
       // and depthAmountBlock which depend on these values.
       const sp = this.smoothedParams[color];
       const targetIntensity = intensity;
       const targetVolume = volume;
-      sp.bass    += (bass    - sp.bass)    * (this.isMobile ? 0.224 : 0.008);
-      sp.texture += (texture - sp.texture) * (this.isMobile ? 0.224 : 0.008);
+      sp.bass    += (bass    - sp.bass)    * kBlock;
+      sp.texture += (texture - sp.texture) * kBlock;
       const smoothedBass    = sp.bass;
       const smoothedTexture = sp.texture;
 
@@ -1559,13 +1569,10 @@ class RealtimeEngine extends AudioWorkletProcessor {
         smoothCoeffBlock = 0.155 + ((texAmt - 0.5) * 1.4);
       }
 
-      // v5.7m: on mobile, smooth sp once per block instead of per sample.
-      // v5.8m: simplified — use proper exponential approach, no overshoot clamp needed.
+      // v5.9m FIX: use kBlock (dynamic) instead of hardcoded 0.224
       if (this.isMobile) {
-        // TC of 0.002/sample → per-block equivalent with 128 samples
-        // Use 1-(1-0.002)^128 ≈ 0.224 to maintain same time constant
-        sp.intensity += (targetIntensity - sp.intensity) * 0.224;
-        sp.volume    += (targetVolume    - sp.volume)    * 0.224;
+        sp.intensity += (targetIntensity - sp.intensity) * kBlock;
+        sp.volume    += (targetVolume    - sp.volume)    * kBlock;
       }
 
       for (let i = 0; i < blockSize; i++) {
@@ -1632,30 +1639,33 @@ class RealtimeEngine extends AudioWorkletProcessor {
           case 'green':
             sampleL = this.genGreen('L');
             sampleR = this.genGreen('R');
-            // v5.8m: skip genGreenBed on mobile
-            if (!this.isMobile) {
-              const bedFade = Math.pow(1.0 - Math.min(1.0, texAmt), 0.85);
-              const bedGain = 0.14 * bedFade;
-              sampleL += this.genGreenBed('L') * bedGain;
-              sampleR += this.genGreenBed('R') * bedGain;
-            }
-            // v5.9m: on mobile skip Math.abs() energy tracking — use fixed small
-            // constant (0.01) instead. greenFill only modulates grain subtly.
             if (this.isMobile) {
-              this.greenFill.L = 0.01;
-              this.greenFill.R = 0.01;
+              // v5.9m: on mobile green is just genGreen + one IIR smoother.
+              // Skip greenBed, greenFill tracking, and the 4 extra rng() calls.
+              // greenSmooth provides the character-defining low-mid focus.
+              const gs = 0.022 + texAmt * 0.018;
+              this.greenSmooth.L += (sampleL - this.greenSmooth.L) * gs;
+              this.greenSmooth.R += (sampleR - this.greenSmooth.R) * gs;
+              sampleL = this.greenSmooth.L;
+              sampleR = this.greenSmooth.R;
             } else {
+              if (!this.isMobile) {
+                const bedFade = Math.pow(1.0 - Math.min(1.0, texAmt), 0.85);
+                const bedGain = 0.14 * bedFade;
+                sampleL += this.genGreenBed('L') * bedGain;
+                sampleR += this.genGreenBed('R') * bedGain;
+              }
               this.greenFill.L = this.greenFill.L * 0.995 + Math.abs(sampleL) * 0.005;
               this.greenFill.R = this.greenFill.R * 0.995 + Math.abs(sampleR) * 0.005;
-            }
-            sampleL += (this.rng() - this.rng()) * this.greenFill.L * 0.11;
-            sampleR += (this.rng() - this.rng()) * this.greenFill.R * 0.11;
+              sampleL += (this.rng() - this.rng()) * this.greenFill.L * 0.11;
+              sampleR += (this.rng() - this.rng()) * this.greenFill.R * 0.11;
 
-            const gs = 0.022 + texAmt * 0.018;
-            this.greenSmooth.L += (sampleL - this.greenSmooth.L) * gs;
-            this.greenSmooth.R += (sampleR - this.greenSmooth.R) * gs;
-            sampleL = this.greenSmooth.L;
-            sampleR = this.greenSmooth.R;
+              const gs = 0.022 + texAmt * 0.018;
+              this.greenSmooth.L += (sampleL - this.greenSmooth.L) * gs;
+              this.greenSmooth.R += (sampleR - this.greenSmooth.R) * gs;
+              sampleL = this.greenSmooth.L;
+              sampleR = this.greenSmooth.R;
+            }
             break;
         }
 
@@ -2198,10 +2208,12 @@ class RealtimeEngine extends AudioWorkletProcessor {
       }
     }
 
-    // ================= FINAL FLOOR CLAMP =================
+    // ================= FINAL FLOOR CLAMP + NaN GUARD =================
+    // v5.9m: clamp NaN/Infinity to 0 — prevents any buffer corruption from
+    // reaching the speaker as a click. Covers any edge case on any device.
     for (let i = 0; i < blockSize; i++) {
-      if (Math.abs(L[i]) < 1e-9) L[i] = 0;
-      if (Math.abs(R[i]) < 1e-9) R[i] = 0;
+      if (!isFinite(L[i]) || Math.abs(L[i]) < 1e-9) L[i] = 0;
+      if (!isFinite(R[i]) || Math.abs(R[i]) < 1e-9) R[i] = 0;
     }
 
     return true;
