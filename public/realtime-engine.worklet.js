@@ -576,23 +576,14 @@ class ColorSignature {
       sigR = mid - side + (apR - mid) * finalWidth * 0.3;
     }
 
-    // 4. AIR SIGNATURE - gated by airGate
-    // v5.5m: on mobile, use single rng() per channel
-    const gatedAirAmount = this.getAirAmount() * Math.max(0, Math.min(1, airGate));
-    if (gatedAirAmount > 1e-6) {
-      let airNoiseL, airNoiseR;
-      if (this.isMobile) {
-        airNoiseL = engine.rng() * gatedAirAmount;
-        airNoiseR = engine.rng() * gatedAirAmount;
-        // v5.8m: skip airFilter biquads on mobile — saves 2 biquad calls per
-        // layer per sample (16 total with 8 layers). Air spectral color is
-        // inaudible in a dense mix. Add directly without filtering.
-        const airSpread = { white: 1.2, pink: 1.0, brown: 0.7, black: 0.6, blue: 1.3, violet: 1.35, grey: 1.1 }[this.color] || 1.0;
-        sigL += airNoiseL * 0.3 * airSpread;
-        sigR += airNoiseR * 0.3 * airSpread;
-      } else {
-        airNoiseL = (engine.rng() - engine.rng()) * gatedAirAmount;
-        airNoiseR = (engine.rng() - engine.rng()) * gatedAirAmount;
+    // 4. AIR SIGNATURE
+    // v5.10m: skip entirely on mobile — 2 rng/sample/layer × 8 layers = 16 rng/sample.
+    // Air is a subtle high-frequency shimmer, completely inaudible in a dense mix.
+    if (!this.isMobile) {
+      const gatedAirAmount = this.getAirAmount() * Math.max(0, Math.min(1, airGate));
+      if (gatedAirAmount > 1e-6) {
+        const airNoiseL = (engine.rng() - engine.rng()) * gatedAirAmount;
+        const airNoiseR = (engine.rng() - engine.rng()) * gatedAirAmount;
         const airL = this.airFilterL.process(airNoiseL);
         const airR = this.airFilterR.process(airNoiseR);
         const airSpread = { white: 1.2, pink: 1.0, brown: 0.7, black: 0.6, blue: 1.3, violet: 1.35, grey: 1.1 }[this.color] || 1.0;
@@ -1686,13 +1677,9 @@ class RealtimeEngine extends AudioWorkletProcessor {
 
         filters.depthL += (sampleL - filters.depthL) * smoothCutoff;
         filters.depthR += (sampleR - filters.depthR) * smoothCutoff;
-        // second pass (double-pole effect)
-        filters.depthL += (filters.depthL - filters.depthL) * smoothCutoff;
-        filters.depthR += (filters.depthR - filters.depthR) * smoothCutoff;
+        // v5.10m: second pass was dead code (x - x = 0), removed entirely
 
-        // v5.7m: on mobile skip the conditional third filter pass (d > 0.6 branch)
-        // — saves a branch + 4 multiply-adds per sample per active layer.
-        // The double smoothCutoff pass above already captures the primary rolloff.
+        // v5.7m: on mobile skip the conditional third filter pass
         if (!this.isMobile && d > 0.6) {
           const extraSmooth = 0.3 + ((d - 0.6) * 0.5);
           filters.depthL += (filters.depthL - filters.depthL) * extraSmooth;
@@ -1714,84 +1701,63 @@ class RealtimeEngine extends AudioWorkletProcessor {
         sampleL *= energyCompBlock;
         sampleR *= energyCompBlock;
 
-        // PATCH v5.2: ZERO-TEXTURE BLEED CLAMP (brown + black only)
-        if ((color === 'brown' || color === 'black') && texAmt < 0.05) {
-          const st = color === 'brown'
-            ? this.zeroTextureBleed.brown
-            : this.zeroTextureBleed.black;
-
-          const k = 0.006 + (0.05 - texAmt) * 0.35;
-
-          st.L += (sampleL - st.L) * k;
-          st.R += (sampleR - st.R) * k;
-
-          sampleL -= st.L;
-          sampleR -= st.R;
-        }
-
-        // SUBSONIC FAILSAFE GUARD (brown + black, texAmt < 0.03 only)
-        if ((color === 'brown' || color === 'black') && texAmt < 0.03) {
-          const guard = this.subsonicGuard[color];
-
-          guard.L = guard.L * 0.999 + sampleL * 0.001;
-          guard.R = guard.R * 0.999 + sampleR * 0.001;
-
-          const energyL = Math.abs(guard.L);
-          const energyR = Math.abs(guard.R);
-
-          const threshold = 0.02;
-
-          if (energyL > threshold) {
-            sampleL -= guard.L * 0.15;
+        // v5.10m: skip zero-texture bleed clamp and subsonic guard on mobile
+        if (!this.isMobile) {
+          if ((color === 'brown' || color === 'black') && texAmt < 0.05) {
+            const st = color === 'brown' ? this.zeroTextureBleed.brown : this.zeroTextureBleed.black;
+            const k = 0.006 + (0.05 - texAmt) * 0.35;
+            st.L += (sampleL - st.L) * k;
+            st.R += (sampleR - st.R) * k;
+            sampleL -= st.L;
+            sampleR -= st.R;
           }
 
-          if (energyR > threshold) {
-            sampleR -= guard.R * 0.15;
+          if ((color === 'brown' || color === 'black') && texAmt < 0.03) {
+            const guard = this.subsonicGuard[color];
+            guard.L = guard.L * 0.999 + sampleL * 0.001;
+            guard.R = guard.R * 0.999 + sampleR * 0.001;
+            const threshold = 0.02;
+            if (Math.abs(guard.L) > threshold) sampleL -= guard.L * 0.15;
+            if (Math.abs(guard.R) > threshold) sampleR -= guard.R * 0.15;
           }
         }
 
         const textureAmount = textureAmountBlock;
 
-        const smoothCoeff = smoothCoeffBlock;
-
-        let airLayer = 0;
-        const airPresence = textureAmount;
-        if (airPresence > 0.01) {
-          // v5.7m: on mobile use 1 rng() for air instead of up to 6
-          if (this.isMobile) {
-            airLayer = this.rng() * airPresence * 0.25;
+        if (this.isMobile) {
+          // v5.10m MOBILE PATH: zero rng, zero grain, zero air.
+          // Only the texture IIR smoother runs — gives the color its character
+          // without any of the stochastic extras that cost rng calls per sample.
+          // Air and grain are inaudible in a multi-layer mobile mix.
+          const fixedCoeff = (color === 'white') ? 0.25 : (color === 'blue' || color === 'violet') ? 0.04 : smoothCoeffBlock;
+          filters.textureL += (sampleL - filters.textureL) * fixedCoeff;
+          filters.textureR += (sampleR - filters.textureR) * fixedCoeff;
+          if (color === 'white' || color === 'blue' || color === 'violet') {
+            sampleL = filters.textureL;
+            sampleR = filters.textureR;
           } else {
+            const rawW = 1.0 - textureAmount;
+            sampleL = sampleL * rawW + filters.textureL * textureAmount;
+            sampleR = sampleR * rawW + filters.textureR * textureAmount;
+          }
+        } else {
+          // DESKTOP PATH — full air + grain + texture blend unchanged
+          const smoothCoeff = smoothCoeffBlock;
+
+          let airLayer = 0;
+          const airPresence = textureAmount;
+          if (airPresence > 0.01) {
             const baseAir = (this.rng() - this.rng()) * airPresence * 0.25;
             airLayer += baseAir;
-
-            if (airPresence > 0.3) {
-              const midAir = this.rng() * (airPresence - 0.3) * 0.35;
-              airLayer += midAir;
-            }
-
-            if (airPresence > 0.6) {
-              const brightAir = (this.rng() - this.rng()) * (airPresence - 0.6) * 0.45;
-              airLayer += brightAir;
-            }
+            if (airPresence > 0.3) airLayer += this.rng() * (airPresence - 0.3) * 0.35;
+            if (airPresence > 0.6) airLayer += (this.rng() - this.rng()) * (airPresence - 0.6) * 0.45;
           }
-        }
 
-        let totalGrainL = 0;
-        let totalGrainR = 0;
-
-        if (textureAmount > 0.01) {
-          const grainRamp = Math.max(0, (textureAmount - 0.01) / 0.99);
-          const grainIntensity = grainRamp * 1.4;
-
-          // v5.9m: on mobile skip grain below 0.15 (inaudible at low texture).
-          // Above 0.15 use 2 rng (same as v5.8m). Saves 2 rng/sample on most layers.
-          if (this.isMobile) {
-            if (textureAmount > 0.15) {
-              const g = this.rng() * grainIntensity * 0.20;
-              totalGrainL = g;
-              totalGrainR = this.rng() * grainIntensity * 0.20;
-            }
-          } else {
+          let totalGrainL = 0;
+          let totalGrainR = 0;
+          if (textureAmount > 0.01) {
+            const grainRamp = Math.max(0, (textureAmount - 0.01) / 0.99);
+            const grainIntensity = grainRamp * 1.4;
             const grain1L = (this.rng() - this.rng()) * grainIntensity * 0.15;
             const grain1R = (this.rng() - this.rng()) * grainIntensity * 0.15;
             const grain2L = this.rng() * grainIntensity * 0.12;
@@ -1801,48 +1767,36 @@ class RealtimeEngine extends AudioWorkletProcessor {
             totalGrainL = grain1L + grain2L + grain3L;
             totalGrainR = grain1R + grain2R + grain3R;
           }
-        }
 
-        // v5.9m: skip greenGrain on mobile (saves 2 IIR + 1 rng + Math.sin/16 per sample)
-        if (!this.isMobile && color === 'green' && textureAmount > 0.01) {
-          const greenOrganicL = this.genGreenGrain('L', textureAmount);
-          const greenOrganicR = this.genGreenGrain('R', textureAmount);
-          totalGrainL = totalGrainL * 0.5 + greenOrganicL * 0.5;
-          totalGrainR = totalGrainR * 0.5 + greenOrganicR * 0.5;
-        }
+          if (color === 'green' && textureAmount > 0.01) {
+            const greenOrganicL = this.genGreenGrain('L', textureAmount);
+            const greenOrganicR = this.genGreenGrain('R', textureAmount);
+            totalGrainL = totalGrainL * 0.5 + greenOrganicL * 0.5;
+            totalGrainR = totalGrainR * 0.5 + greenOrganicR * 0.5;
+          }
 
-        const grainMix = grainMixBlock;
+          const grainMix = grainMixBlock;
 
-        if (color === 'white' || color === 'blue' || color === 'violet') {
-          const fixedCoeff = (color === 'white') ? 0.25 : 0.04;
-          filters.textureL += (sampleL - filters.textureL) * fixedCoeff;
-          filters.textureR += (sampleR - filters.textureR) * fixedCoeff;
-
-          sampleL = filters.textureL;
-          sampleR = filters.textureR;
-
-          const grainScale = textureAmount;
-          sampleL += totalGrainL * grainScale + airLayer * grainScale;
-          sampleR += totalGrainR * grainScale + airLayer * grainScale;
-        } else if (color === 'green') {
-          const rawWeight = 1.0 - textureAmount;
-          const filtWeight = textureAmount;
-
-          filters.textureL += (sampleL - filters.textureL) * smoothCoeff;
-          filters.textureR += (sampleR - filters.textureR) * smoothCoeff;
-
-          const core = 0.28;
-          sampleL = sampleL * core + (sampleL * rawWeight + filters.textureL * filtWeight) * (1 - core) + totalGrainL * grainMix + airLayer * textureAmount;
-          sampleR = sampleR * core + (sampleR * rawWeight + filters.textureR * filtWeight) * (1 - core) + totalGrainR * grainMix + airLayer * textureAmount;
-        } else {
-          const rawWeight = 1.0 - textureAmount;
-          const filtWeight = textureAmount;
-
-          filters.textureL += (sampleL - filters.textureL) * smoothCoeff;
-          filters.textureR += (sampleR - filters.textureR) * smoothCoeff;
-
-          sampleL = sampleL * rawWeight + filters.textureL * filtWeight + totalGrainL * grainMix + airLayer * textureAmount;
-          sampleR = sampleR * rawWeight + filters.textureR * filtWeight + totalGrainR * grainMix + airLayer * textureAmount;
+          if (color === 'white' || color === 'blue' || color === 'violet') {
+            const fixedCoeff = (color === 'white') ? 0.25 : 0.04;
+            filters.textureL += (sampleL - filters.textureL) * fixedCoeff;
+            filters.textureR += (sampleR - filters.textureR) * fixedCoeff;
+            sampleL = filters.textureL + totalGrainL * textureAmount + airLayer * textureAmount;
+            sampleR = filters.textureR + totalGrainR * textureAmount + airLayer * textureAmount;
+          } else if (color === 'green') {
+            const rawWeight = 1.0 - textureAmount;
+            filters.textureL += (sampleL - filters.textureL) * smoothCoeff;
+            filters.textureR += (sampleR - filters.textureR) * smoothCoeff;
+            const core = 0.28;
+            sampleL = sampleL * core + (sampleL * rawWeight + filters.textureL * textureAmount) * (1 - core) + totalGrainL * grainMix + airLayer * textureAmount;
+            sampleR = sampleR * core + (sampleR * rawWeight + filters.textureR * textureAmount) * (1 - core) + totalGrainR * grainMix + airLayer * textureAmount;
+          } else {
+            const rawWeight = 1.0 - textureAmount;
+            filters.textureL += (sampleL - filters.textureL) * smoothCoeff;
+            filters.textureR += (sampleR - filters.textureR) * smoothCoeff;
+            sampleL = sampleL * rawWeight + filters.textureL * textureAmount + totalGrainL * grainMix + airLayer * textureAmount;
+            sampleR = sampleR * rawWeight + filters.textureR * textureAmount + totalGrainR * grainMix + airLayer * textureAmount;
+          }
         }
 
         buf.L[i] = sampleL;
