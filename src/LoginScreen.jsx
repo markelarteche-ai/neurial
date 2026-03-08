@@ -129,7 +129,7 @@ export default function LoginScreen() {
                 boxSizing: 'border-box',
               }}
             >
-              {loading ? 'Sending...' : 'Send Magic Link'}
+              {loading ? 'Sending...' : 'Send'}
             </button>
 
             <p style={{ color: '#475569', fontSize: '12px' }}>

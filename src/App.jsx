@@ -1550,30 +1550,18 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
 
               {/* RIGHT: PRO/Upgrade + sign out */}
               {isPro ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  {user?.email && <p style={{ fontSize: '12px', color: '#94a3b8', maxWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', margin: 0 }}>{user.email}</p>}
-                  <p style={{ fontSize: '12px', fontWeight: 700, color: '#facc15', margin: 0, whiteSpace: 'nowrap' }}>⚡ PRO</p>
-                  {onSignOut && (
-                    <button onClick={onSignOut} style={{ padding: '6px 12px', borderRadius: '8px', fontSize: '12px', color: '#94a3b8', border: '1px solid #475569', background: 'transparent', cursor: 'pointer' }}>
-                      Sign out
-                    </button>
-                  )}
+                <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '20px' }}>
+                  <span style={{ fontSize: '12px', color: '#94a3b8', whiteSpace: 'nowrap' }}>{user?.email || 'markelarteche@gmail.com'}</span>
+                  <span style={{ fontSize: '12px', fontWeight: 700, color: '#facc15', whiteSpace: 'nowrap' }}>⚡ PRO</span>
+                  <button onClick={onSignOut} style={{ padding: '6px 12px', borderRadius: '8px', fontSize: '12px', color: '#94a3b8', border: '1px solid #475569', background: 'transparent', cursor: 'pointer', whiteSpace: 'nowrap' }}>Sign out</button>
                 </div>
               ) : (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  {user?.email && <p style={{ fontSize: '12px', color: '#94a3b8', maxWidth: '100px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', margin: 0 }}>{user.email}</p>}
-                  <button
-                    onClick={() => window.location.href = `https://buy.stripe.com/test_9B6cN5eKfeBZ3OCfPH4gg00?success_url=${encodeURIComponent(window.location.origin + '?upgraded=true')}`}
-                    style={{ padding: '8px 16px', borderRadius: '12px', fontWeight: 700, fontSize: '14px', background: 'linear-gradient(to right,#facc15,#fde047)', color: '#000', border: '2px solid rgba(234,179,8,0.5)', boxShadow: '0 4px 6px rgba(250,204,21,0.3)', cursor: 'pointer', transition: 'all 0.3s' }}
-                  >
-                    ⚡ Upgrade
-                  </button>
-                  {onSignOut && (
-                    <button onClick={onSignOut} style={{ padding: '6px 12px', borderRadius: '8px', fontSize: '12px', color: '#94a3b8', border: '1px solid #475569', background: 'transparent', cursor: 'pointer' }}>
-                      Sign out
-                    </button>
-                  )}
-                </div>
+                <button
+                  onClick={() => window.location.href = `https://buy.stripe.com/bJebJ1eMgdmxcPf5r8b3q00?success_url=${encodeURIComponent(window.location.origin + '?upgraded=true')}`}
+                  style={{ padding: '8px 16px', borderRadius: '12px', fontWeight: 700, fontSize: '14px', background: 'linear-gradient(to right,#facc15,#fde047)', color: '#000', border: '2px solid rgba(234,179,8,0.5)', boxShadow: '0 4px 6px rgba(250,204,21,0.3)', cursor: 'pointer', transition: 'all 0.3s' }}
+                >
+                  ⚡ Upgrade
+                </button>
               )}
             </div>
           </div>
@@ -1787,24 +1775,32 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
                       </div>
                       <div style={{ width: '100%', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', textAlign: 'left' }}>
                         <div style={{ borderRadius: '12px', padding: '16px', background: 'rgba(30,41,59,0.7)', border: '2px solid rgba(71,85,105,0.5)' }}>
-                          <p style={{ fontWeight: 700, fontSize: '12px', marginBottom: '8px', color: '#cbd5e1', margin: '0 0 8px 0' }}>FREE</p>
-                          <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                            <li style={{ display: 'flex', gap: '8px', fontSize: '12px', color: '#94a3b8' }}><span style={{ color: '#64748b' }}>•</span>10 min sessions</li>
-                            <li style={{ display: 'flex', gap: '8px', fontSize: '12px', color: '#94a3b8' }}><span style={{ color: '#f87171' }}>✕</span><span style={{ color: '#64748b' }}>No export</span></li>
+                          <p style={{ fontWeight: 700, fontSize: '12px', marginBottom: '10px', color: '#cbd5e1', margin: '0 0 10px 0' }}>FREE</p>
+                          <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '7px' }}>
+                            <li style={{ display: 'flex', gap: '8px', fontSize: '11px', color: '#94a3b8' }}><span style={{ color: '#64748b', flexShrink: 0 }}>•</span>10 minute sessions</li>
+                            <li style={{ display: 'flex', gap: '8px', fontSize: '11px', color: '#94a3b8' }}><span style={{ color: '#64748b', flexShrink: 0 }}>•</span>Basic sound layers</li>
+                            <li style={{ display: 'flex', gap: '8px', fontSize: '11px', color: '#64748b' }}><span style={{ color: '#f87171', flexShrink: 0 }}>✕</span>No audio export</li>
+                            <li style={{ display: 'flex', gap: '8px', fontSize: '11px', color: '#64748b' }}><span style={{ color: '#f87171', flexShrink: 0 }}>✕</span>Limited generator access</li>
+                            <li style={{ display: 'flex', gap: '8px', fontSize: '11px', color: '#64748b' }}><span style={{ color: '#f87171', flexShrink: 0 }}>✕</span>No commercial usage</li>
                           </ul>
                         </div>
                         <div style={{ borderRadius: '12px', padding: '16px', position: 'relative', background: 'rgba(250,204,21,0.1)', border: '2px solid rgba(250,204,21,0.6)' }}>
                           <div style={{ position: 'absolute', borderRadius: '9999px', top: '-10px', left: '50%', transform: 'translateX(-50%)', background: '#facc15', color: '#000', fontSize: '0.65rem', fontWeight: 700, padding: '2px 8px', whiteSpace: 'nowrap' }}>RECOMMENDED</div>
-                          <p style={{ fontWeight: 700, fontSize: '12px', marginBottom: '4px', color: '#fde047', margin: '0 0 4px 0' }}>PRO</p>
-                          <p style={{ fontSize: '12px', fontWeight: 600, marginBottom: '8px', color: 'rgba(250,204,21,0.8)', margin: '0 0 8px 0' }}>9.99€/month</p>
-                          <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                            <li style={{ display: 'flex', gap: '8px', fontSize: '12px', color: '#e2e8f0' }}><span style={{ color: '#facc15' }}>✓</span>Unlimited sessions</li>
-                            <li style={{ display: 'flex', gap: '8px', fontSize: '12px', color: '#e2e8f0' }}><span style={{ color: '#facc15' }}>✓</span>Unlimited exports</li>
+                          <p style={{ fontWeight: 700, fontSize: '12px', color: '#fde047', margin: '0 0 2px 0' }}>PRO</p>
+                          <p style={{ fontSize: '11px', fontWeight: 600, color: 'rgba(250,204,21,0.8)', margin: '0 0 10px 0' }}>9.99€/month</p>
+                          <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '7px' }}>
+                            <li style={{ display: 'flex', gap: '8px', fontSize: '11px', color: '#e2e8f0' }}><span style={{ color: '#facc15', flexShrink: 0 }}>✓</span>Unlimited sessions</li>
+                            <li style={{ display: 'flex', gap: '8px', fontSize: '11px', color: '#e2e8f0' }}><span style={{ color: '#facc15', flexShrink: 0 }}>✓</span>Unlimited audio export</li>
+                            <li style={{ display: 'flex', gap: '8px', fontSize: '11px', color: '#e2e8f0' }}><span style={{ color: '#facc15', flexShrink: 0 }}>✓</span>Export WAV 24-bit or MP3</li>
+                            <li style={{ display: 'flex', gap: '8px', fontSize: '11px', color: '#e2e8f0' }}><span style={{ color: '#facc15', flexShrink: 0 }}>✓</span>Commercial usage allowed</li>
+                            <li style={{ display: 'flex', gap: '8px', fontSize: '11px', color: '#e2e8f0' }}><span style={{ color: '#facc15', flexShrink: 0 }}>✓</span>Royalty-free audio</li>
+                            <li style={{ display: 'flex', gap: '8px', fontSize: '11px', color: '#e2e8f0' }}><span style={{ color: '#facc15', flexShrink: 0 }}>✓</span>High-quality rendering</li>
+                            <li style={{ display: 'flex', gap: '8px', fontSize: '11px', color: '#e2e8f0' }}><span style={{ color: '#facc15', flexShrink: 0 }}>✓</span>Priority feature updates</li>
                           </ul>
                         </div>
                       </div>
                       <button
-                        onClick={() => window.location.href = `https://buy.stripe.com/test_9B6cN5eKfeBZ3OCfPH4gg00?success_url=${encodeURIComponent(window.location.origin + '?upgraded=true')}`}
+                        onClick={() => window.location.href = `https://buy.stripe.com/bJebJ1eMgdmxcPf5r8b3q00?success_url=${encodeURIComponent(window.location.origin + '?upgraded=true')}`}
                         style={{ width: '100%', padding: '16px', borderRadius: '12px', fontWeight: 700, fontSize: '18px', background: 'linear-gradient(to right,#facc15,#fde047)', color: '#000', border: '2px solid rgba(234,179,8,0.5)', boxShadow: '0 4px 6px rgba(250,204,21,0.3)', cursor: 'pointer', transition: 'all 0.3s' }}
                       >
                         ⚡ Upgrade to Pro — 9.99€/month
@@ -1894,7 +1890,7 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
                 ⏳ <strong>Sesión terminando...</strong> El audio se está desvaneciendo. Actualiza a Pro para continuar.
               </p>
               <button
-                onClick={() => { window.location.href = `https://buy.stripe.com/test_9B6cN5eKfeBZ3OCfPH4gg00?success_url=${encodeURIComponent(window.location.origin + '?upgraded=true')}`; }}
+                onClick={() => { window.location.href = `https://buy.stripe.com/bJebJ1eMgdmxcPf5r8b3q00?success_url=${encodeURIComponent(window.location.origin + '?upgraded=true')}`; }}
                 style={{ padding: '6px 14px', borderRadius: '8px', background: '#facc15', color: '#000', border: 'none', fontWeight: 700, fontSize: '12px', cursor: 'pointer', whiteSpace: 'nowrap' }}
               >
                 ⚡ Upgrade
@@ -1964,25 +1960,32 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
             <h2 style={{ fontSize: '24px', fontWeight: 700, marginBottom: '24px', width: '100%', textAlign: 'center', color: '#facc15', margin: '0 0 24px 0' }}>⏳ Free Limit Reached</h2>
             <div style={{ width: '100%', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '24px' }}>
               <div style={{ borderRadius: '12px', padding: '16px', textAlign: 'left', background: 'rgba(30,41,59,0.7)', border: '2px solid rgba(71,85,105,0.5)' }}>
-                <p style={{ fontWeight: 700, fontSize: '14px', marginBottom: '12px', color: '#cbd5e1', margin: '0 0 12px 0' }}>FREE</p>
-                <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <li style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', fontSize: '12px', color: '#94a3b8' }}><span style={{ color: '#64748b' }}>•</span>10 minute sessions</li>
-                  <li style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', fontSize: '12px', color: '#94a3b8' }}><span style={{ color: '#f87171' }}>✕</span><span style={{ color: '#64748b' }}>No export</span></li>
+                <p style={{ fontWeight: 700, fontSize: '13px', color: '#cbd5e1', margin: '0 0 10px 0' }}>FREE</p>
+                <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '7px' }}>
+                  <li style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', fontSize: '11px', color: '#94a3b8' }}><span style={{ color: '#64748b', flexShrink: 0 }}>•</span>10 minute sessions</li>
+                  <li style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', fontSize: '11px', color: '#94a3b8' }}><span style={{ color: '#64748b', flexShrink: 0 }}>•</span>Basic sound layers</li>
+                  <li style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', fontSize: '11px', color: '#64748b' }}><span style={{ color: '#f87171', flexShrink: 0 }}>✕</span>No audio export</li>
+                  <li style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', fontSize: '11px', color: '#64748b' }}><span style={{ color: '#f87171', flexShrink: 0 }}>✕</span>Limited generator access</li>
+                  <li style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', fontSize: '11px', color: '#64748b' }}><span style={{ color: '#f87171', flexShrink: 0 }}>✕</span>No commercial usage</li>
                 </ul>
               </div>
               <div style={{ borderRadius: '12px', padding: '16px', textAlign: 'left', position: 'relative', background: 'rgba(250,204,21,0.1)', border: '2px solid rgba(250,204,21,0.6)' }}>
                 <div style={{ position: 'absolute', borderRadius: '9999px', top: '-10px', left: '50%', transform: 'translateX(-50%)', background: '#facc15', color: '#000', fontSize: '0.65rem', fontWeight: 700, padding: '2px 10px', whiteSpace: 'nowrap' }}>RECOMMENDED</div>
-                <p style={{ fontWeight: 700, fontSize: '14px', marginBottom: '4px', color: '#fde047', margin: '0 0 4px 0' }}>PRO</p>
-                <p style={{ fontSize: '12px', fontWeight: 600, marginBottom: '12px', color: 'rgba(250,204,21,0.8)', margin: '0 0 12px 0' }}>9.99€ / month</p>
-                <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <li style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', fontSize: '12px', color: '#e2e8f0' }}><span style={{ color: '#facc15' }}>✓</span>Unlimited sessions</li>
-                  <li style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', fontSize: '12px', color: '#e2e8f0' }}><span style={{ color: '#facc15' }}>✓</span>Unlimited exports</li>
-                  <li style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', fontSize: '12px', color: '#e2e8f0' }}><span style={{ color: '#facc15' }}>✓</span>Full generator access</li>
+                <p style={{ fontWeight: 700, fontSize: '13px', color: '#fde047', margin: '0 0 2px 0' }}>PRO</p>
+                <p style={{ fontSize: '11px', fontWeight: 600, color: 'rgba(250,204,21,0.8)', margin: '0 0 10px 0' }}>9.99€ / month</p>
+                <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '7px' }}>
+                  <li style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', fontSize: '11px', color: '#e2e8f0' }}><span style={{ color: '#facc15', flexShrink: 0 }}>✓</span>Unlimited sessions</li>
+                  <li style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', fontSize: '11px', color: '#e2e8f0' }}><span style={{ color: '#facc15', flexShrink: 0 }}>✓</span>Unlimited audio export</li>
+                  <li style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', fontSize: '11px', color: '#e2e8f0' }}><span style={{ color: '#facc15', flexShrink: 0 }}>✓</span>Export WAV 24-bit or MP3</li>
+                  <li style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', fontSize: '11px', color: '#e2e8f0' }}><span style={{ color: '#facc15', flexShrink: 0 }}>✓</span>Commercial usage allowed</li>
+                  <li style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', fontSize: '11px', color: '#e2e8f0' }}><span style={{ color: '#facc15', flexShrink: 0 }}>✓</span>Royalty-free audio</li>
+                  <li style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', fontSize: '11px', color: '#e2e8f0' }}><span style={{ color: '#facc15', flexShrink: 0 }}>✓</span>High-quality rendering</li>
+                  <li style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', fontSize: '11px', color: '#e2e8f0' }}><span style={{ color: '#facc15', flexShrink: 0 }}>✓</span>Priority feature updates</li>
                 </ul>
               </div>
             </div>
             <button
-              onClick={() => window.location.href = `https://buy.stripe.com/test_9B6cN5eKfeBZ3OCfPH4gg00?success_url=${encodeURIComponent(window.location.origin + '?upgraded=true')}`}
+              onClick={() => window.location.href = `https://buy.stripe.com/bJebJ1eMgdmxcPf5r8b3q00?success_url=${encodeURIComponent(window.location.origin + '?upgraded=true')}`}
               style={{ width: '100%', padding: '16px', borderRadius: '12px', fontWeight: 700, fontSize: '18px', textAlign: 'center', background: 'linear-gradient(to right,#facc15,#fde047)', color: '#000', border: '2px solid rgba(234,179,8,0.5)', boxShadow: '0 4px 6px rgba(250,204,21,0.3)', cursor: 'pointer', transition: 'all 0.3s', boxSizing: 'border-box' }}
             >
               ⚡ Upgrade to Pro — 9.99€/month
