@@ -152,7 +152,7 @@ const ExportProgressBar = ({ exportProgress, formatTime, NT }) => {
 // ===================== MAIN COMPONENT =====================
 const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut = null }) => {
 
-  const ADMIN_EMAILS = ['markelarteche@gmail.com'];
+  const ADMIN_EMAILS = ['markelarteche@gmail.com', 'pruebaneurial@gmail.com'];
   const isAdmin = user?.email && ADMIN_EMAILS.includes(user.email);
 
   const [serverIsPro, setServerIsPro] = useState(isPropPro);
