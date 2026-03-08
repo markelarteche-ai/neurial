@@ -364,20 +364,26 @@ class ColorSignature {
   }
 
   // FIX: No return value — writes to this._outL / this._outR
-  // Eliminates one array allocation per sample in the hot path
-  process(sampleL, sampleR, rng, airGate = 1.0) {
+  // quality: 'full' | 'medium' | 'low' — controls DSP load on mobile
+  process(sampleL, sampleR, rng, airGate = 1.0, quality = 'full') {
     if (sampleL === 0 && sampleR === 0) {
       this._outL = 0;
       this._outR = 0;
       return;
     }
 
-    this.updateSpectralBreathing();
+    // 'full' updates spectral breathing every 64 samples (expensive LFO)
+    // 'medium'/'low' update every 256 samples — inaudible difference
+    if (quality === 'full' || (this.breathingSampleCount & 0xFF) === 0) {
+      this.updateSpectralBreathing();
+    }
 
     let sigL = sampleL;
     let sigR = sampleR;
 
-    for (let i = 0; i < 4; i++) {
+    // 'low': 2 biquads instead of 4 — halves spectral filter cost
+    const biquadCount = quality === 'low' ? 2 : 4;
+    for (let i = 0; i < biquadCount; i++) {
       sigL = this.spectralL[i].process(sigL);
       sigR = this.spectralR[i].process(sigR);
     }
@@ -387,49 +393,63 @@ class ColorSignature {
     sigL *= tilt;
     sigR *= tilt;
 
-    this.windPhase += 0.00002;
-    const windBase = Math.sin(this.windPhase);
-    this.wind += (windBase - this.wind) * 0.002;
+    // Wind grain — skip on 'low' quality (subtle effect, noticeable CPU cost)
+    if (quality !== 'low') {
+      this.windPhase += 0.00002;
+      const windBase = Math.sin(this.windPhase);
+      this.wind += (windBase - this.wind) * 0.002;
+      const windStrength = this.getWindStrength();
+      this.grainCarryL += (sigL - this.grainCarryL) * 0.05;
+      this.grainCarryR += (sigR - this.grainCarryR) * 0.05;
+      sigL += this.grainCarryL * this.wind * windStrength;
+      sigR += this.grainCarryR * this.wind * windStrength;
+    }
 
-    const windStrength = this.getWindStrength();
-    this.grainCarryL += (sigL - this.grainCarryL) * 0.05;
-    this.grainCarryR += (sigR - this.grainCarryR) * 0.05;
-    sigL += this.grainCarryL * this.wind * windStrength;
-    sigR += this.grainCarryR * this.wind * windStrength;
-
-    const motion = this.getMotionModulation();
-    const motionGain = 1.0 + motion;
-    sigL *= motionGain;
-    sigR *= motionGain;
+    // Motion modulation — skip on 'low' (very subtle ±2% gain variation)
+    if (quality !== 'low') {
+      const motion = this.getMotionModulation();
+      sigL *= 1.0 + motion;
+      sigR *= 1.0 + motion;
+    }
 
     const width = this.getSpatialWidth();
     const widthBias = { white: 1.05, pink: 0.96, brown: 0.85, black: 0.78, blue: 1.12, violet: 1.18, grey: 1.02 }[this.color] || 1.0;
     const finalWidth = width * widthBias;
-    const delayOffset = this.getSpatialDelayOffset();
 
-    this.spatialDelayL[this.spatialPos] = sigL;
-    this.spatialDelayR[this.spatialPos] = sigR;
-    const delayedL = this.spatialDelayL[(this.spatialPos - delayOffset + 512) % 512];
-    const delayedR = this.spatialDelayR[(this.spatialPos - delayOffset + 512) % 512];
-    this.spatialPos = (this.spatialPos + 1) % 512;
+    // Spatial delay + allpass — skip on 'low', simplified on 'medium'
+    if (quality === 'full') {
+      const delayOffset = this.getSpatialDelayOffset();
+      this.spatialDelayL[this.spatialPos] = sigL;
+      this.spatialDelayR[this.spatialPos] = sigR;
+      const delayedL = this.spatialDelayL[(this.spatialPos - delayOffset + 512) % 512];
+      const delayedR = this.spatialDelayR[(this.spatialPos - delayOffset + 512) % 512];
+      this.spatialPos = (this.spatialPos + 1) % 512;
+      const apL = this.allpassL.process(sigL);
+      const apR = this.allpassR.process(sigR);
+      const mid = (sigL + sigR) * 0.5;
+      const side = (sigL - sigR) * 0.5 * finalWidth;
+      sigL = mid + side + (apL - mid) * finalWidth * 0.3;
+      sigR = mid - side + (apR - mid) * finalWidth * 0.3;
+    } else {
+      // medium/low: simple M/S width only — no delay, no allpass
+      const mid  = (sigL + sigR) * 0.5;
+      const side = (sigL - sigR) * 0.5 * finalWidth;
+      sigL = mid + side;
+      sigR = mid - side;
+    }
 
-    const apL = this.allpassL.process(sigL);
-    const apR = this.allpassR.process(sigR);
-
-    const mid = (sigL + sigR) * 0.5;
-    const side = (sigL - sigR) * 0.5 * finalWidth;
-    sigL = mid + side + (apL - mid) * finalWidth * 0.3;
-    sigR = mid - side + (apR - mid) * finalWidth * 0.3;
-
-    const gatedAirAmount = this.getAirAmount() * Math.max(0, Math.min(1, airGate));
-    if (gatedAirAmount > 1e-6) {
-      const airNoiseL = (rng() - rng()) * gatedAirAmount;
-      const airNoiseR = (rng() - rng()) * gatedAirAmount;
-      const airL = this.airFilterL.process(airNoiseL);
-      const airR = this.airFilterR.process(airNoiseR);
-      const airSpread = { white: 1.2, pink: 1.0, brown: 0.7, black: 0.6, blue: 1.3, violet: 1.35, grey: 1.1 }[this.color] || 1.0;
-      sigL += airL * 0.3 * airSpread;
-      sigR += airR * 0.3 * airSpread;
+    // Air noise — skip on 'medium' and 'low' (adds 2x rng calls + 2 biquads per sample)
+    if (quality === 'full') {
+      const gatedAirAmount = this.getAirAmount() * Math.max(0, Math.min(1, airGate));
+      if (gatedAirAmount > 1e-6) {
+        const airNoiseL = (rng() - rng()) * gatedAirAmount;
+        const airNoiseR = (rng() - rng()) * gatedAirAmount;
+        const airL = this.airFilterL.process(airNoiseL);
+        const airR = this.airFilterR.process(airNoiseR);
+        const airSpread = { white: 1.2, pink: 1.0, brown: 0.7, black: 0.6, blue: 1.3, violet: 1.35, grey: 1.1 }[this.color] || 1.0;
+        sigL += airL * 0.3 * airSpread;
+        sigR += airR * 0.3 * airSpread;
+      }
     }
 
     this._outL = sigL;
@@ -439,8 +459,21 @@ class ColorSignature {
 
 // ================= MAIN ENGINE =================
 class RealtimeEngine extends AudioWorkletProcessor {
-  constructor() {
-    super();
+  constructor(options) {
+    super(options);
+
+    // ── Adaptive quality profile ──────────────────────────────────────────
+    // React passes isMobile + cpuCores via processorOptions.
+    // 'full'   — desktop or powerful mobile: all DSP active
+    // 'medium' — mid mobile (>=6 cores): skip air noise, reduce allpass
+    // 'low'    — weak mobile (<6 cores) or large blockSize detected at runtime
+    const opts = (options && options.processorOptions) || {};
+    const isMobile = opts.isMobile || false;
+    const cpuCores = opts.cpuCores || 8;
+    this._quality = isMobile
+      ? (cpuCores >= 6 ? 'medium' : 'low')
+      : 'full';
+    this._blockSizeChecked = false; // auto-downgrade if blockSize > 512 detected
 
     this.rngState = 0x12345678;
     for (let i = 0; i < 10000; i++) { this.rng(); }
@@ -967,34 +1000,40 @@ class RealtimeEngine extends AudioWorkletProcessor {
   // ================= MAIN PROCESS =================
   process(inputs, outputs, parameters) {
     // First block: notify React that worklet is alive and processing.
-    // This replaces all setTimeout-based forceParams retries in React —
-    // params sent after this message are guaranteed to land.
     if (!this._ready) {
       this._ready = true;
       this.port.postMessage({ type: 'ready' });
     }
 
-    if (!this._diagnostics) {
-  this._diagnostics = { blockSizes: {}, callCount: 0, lastReport: 0 };
-}
-const diag = this._diagnostics;
-diag.callCount++;
-diag.blockSizes[blockSize] = (diag.blockSizes[blockSize] || 0) + 1;
-
-// Report every 2 seconds
-if (diag.callCount % 200 === 0) {
-  this.port.postMessage({
-    type: 'diagnostics',
-    blockSizes: diag.blockSizes,
-    callCount: diag.callCount,
-    sampleRate: sampleRate
-  });
-}
-
     const output = outputs[0];
     const L = output[0];
     const R = output[1];
     const blockSize = L.length;
+
+    // ── Runtime adaptive quality + buffer resize ──────────────────────────
+    // On first real block, check actual blockSize from the audio driver.
+    // If blockSize > 512 we auto-downgrade quality to avoid CPU overrun.
+    // If blockSize > 8192 we resize the noise buffers to prevent overflow.
+    if (!this._blockSizeChecked) {
+      this._blockSizeChecked = true;
+      if (blockSize > 512 && this._quality === 'full') {
+        this._quality = 'medium';
+      }
+      if (blockSize > 512) {
+        this._quality = this._quality === 'full' ? 'medium' : this._quality;
+      }
+      if (blockSize > 8192) {
+        // Resize noise buffers to fit the actual blockSize + margin
+        const newSize = blockSize * 2;
+        const COLORS = this._COLORS;
+        for (let ci = 0; ci < COLORS.length; ci++) {
+          this.noiseBuffers[COLORS[ci]].L = new Float32Array(newSize);
+          this.noiseBuffers[COLORS[ci]].R = new Float32Array(newSize);
+        }
+      }
+      // Report detected config back to React (useful for debugging)
+      this.port.postMessage({ type: 'config', blockSize, quality: this._quality, sr: sampleRate });
+    }
 
     L.fill(0);
     R.fill(0);
@@ -1189,7 +1228,7 @@ if (diag.callCount % 200 === 0) {
         sampleR *= densitySmooth;
 
         // FIX: No array allocation — signature writes to _outL/_outR
-        signature.process(sampleL, sampleR, () => this.rng(), textureAmountPre);
+        signature.process(sampleL, sampleR, () => this.rng(), textureAmountPre, this._quality);
         sampleL = signature._outL;
         sampleR = signature._outR;
 
@@ -1393,8 +1432,9 @@ if (diag.callCount % 200 === 0) {
     }
 
     // ── Stereo decorrelation ──────────────────────────────────────────────
+    // Skip on low quality — diffuse delays are expensive and subtle
     const decorr = parameters.stereoDecorr[0];
-    if (decorr > 0.01) {
+    if (decorr > 0.01 && this._quality !== 'low') {
       let hasSignal = false;
       for (let i = 0; i < blockSize; i++) {
         if (L[i] !== 0 || R[i] !== 0) { hasSignal = true; break; }

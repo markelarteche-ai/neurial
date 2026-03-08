@@ -776,9 +776,13 @@ workletLoadedRef.current = true;
 try { await ctx.resume(); } catch {}
 
       const engine = new AudioWorkletNode(ctx, 'realtime-engine', {
-        numberOfOutputs: 1,
-        outputChannelCount: [2]
-      });
+  numberOfOutputs: 1,
+  outputChannelCount: [2],
+  processorOptions: {
+    isMobile: /Android|iPhone|iPad|Mobile|HarmonyOS/i.test(navigator.userAgent),
+    cpuCores: navigator.hardwareConcurrency || 4,
+  }
+});
 
       mixerNodeRef.current = engine;
 
