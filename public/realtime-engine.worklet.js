@@ -1440,6 +1440,16 @@ class RealtimeEngine extends AudioWorkletProcessor {
       const filters = this.layerFilters[color];
       const signature = this.colorSignatures[color];
 
+      // v5.8m: smooth bass and texture FIRST — must happen before textureAmountPre
+      // and depthAmountBlock which depend on these values.
+      const sp = this.smoothedParams[color];
+      const targetIntensity = intensity;
+      const targetVolume = volume;
+      sp.bass    += (bass    - sp.bass)    * (this.isMobile ? 0.224 : 0.008);
+      sp.texture += (texture - sp.texture) * (this.isMobile ? 0.224 : 0.008);
+      const smoothedBass    = sp.bass;
+      const smoothedTexture = sp.texture;
+
       const textureScalePre = {
         grey: 0.70, brown: 0.50, pink: 0.88, black: 0.16,
         blue: 0.85, violet: 0.95
@@ -1450,20 +1460,6 @@ class RealtimeEngine extends AudioWorkletProcessor {
         this.brownSmoothed.bass    += (smoothedBass    - this.brownSmoothed.bass)    * 0.002;
         this.brownSmoothed.texture += (smoothedTexture - this.brownSmoothed.texture) * 0.002;
       }
-
-      const sp = this.smoothedParams[color];
-      const targetIntensity = intensity;
-      const targetVolume = volume;
-
-      // v5.8m: smooth bass and texture internally in the worklet to prevent
-      // zipper noise clicks when sliders move, regardless of AudioParam TC.
-      // TC: 0.008/sample ≈ 20ms at 44.1kHz — fast enough to follow sliders,
-      // slow enough to eliminate discontinuities.
-      const smoothK = this.isMobile ? 0.224 : 0.008; // per-block vs per-sample
-      sp.bass    += (bass    - sp.bass)    * (this.isMobile ? smoothK : 0.008);
-      sp.texture += (texture - sp.texture) * (this.isMobile ? smoothK : 0.008);
-      const smoothedBass    = sp.bass;
-      const smoothedTexture = sp.texture;
 
       filters.smoothedTexture += (textureAmountPre - filters.smoothedTexture) * 0.004;
       const texAmt = filters.smoothedTexture;
