@@ -636,6 +636,12 @@ class RealtimeEngine extends AudioWorkletProcessor {
       };
     });
 
+    // ================= LAYER ACTIVITY TRACKING =================
+    this.layerWasActive = {};
+    ['white','pink','brown','grey','blue','violet','black','green'].forEach(c=>{
+      this.layerWasActive[c] = false;
+    });
+
     // ================= 3D AUDIO - DECORRELATION =================
     this.decorrelationDelay = new Float32Array(4096);
     this.decorrelationPos = 0;
@@ -1369,9 +1375,14 @@ class RealtimeEngine extends AudioWorkletProcessor {
       const intensity = parameters[`${color}_intensity`][0];
 
       if (intensity < 0.001) {
-        this.resetLayerState(color);
+        if (this.layerWasActive[color]) {
+          this.resetLayerState(color);
+          this.layerWasActive[color] = false;
+        }
         return;
       }
+
+      this.layerWasActive[color] = true;
 
       const volume = parameters[`${color}_volume`][0];
       const bass = parameters[`${color}_bass`][0];
@@ -1396,10 +1407,10 @@ class RealtimeEngine extends AudioWorkletProcessor {
       const targetIntensity = intensity;
       const targetVolume = volume;
 
-      filters.smoothedTexture += (textureAmountPre - filters.smoothedTexture) * 0.02;
+      filters.smoothedTexture += (textureAmountPre - filters.smoothedTexture) * 0.004;
       const texAmt = filters.smoothedTexture;
 
-      this.densityRamp[color] += (targetIntensity - this.densityRamp[color]) * 0.08;
+      this.densityRamp[color] += (targetIntensity - this.densityRamp[color]) * 0.01;
       const rampRaw = Math.max(0, Math.min(1, this.densityRamp[color]));
       const densitySmooth = rampRaw * rampRaw * (3 - 2 * rampRaw);
 
