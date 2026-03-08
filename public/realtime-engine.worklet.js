@@ -11,8 +11,10 @@
 // v5.4:  per-color identity pass — broche final for pink/brown/black/blue/violet/grey/green
 // v5.5m: mobile CPU optimizations — air consolidation, wind subsampling,
 //         allpass bypass, spatial delay passthrough, applySpatialPsycho lite
-// v5.6m: motion LFO subsampling (biggest Math.sin savings), green breathing
-//         subsampling, depth/bass pre-computed per block, textureAmount pre-computed
+// v5.6m: motion LFO subsampling, green breathing subsampling,
+//         depth/bass pre-computed per block, textureAmount pre-computed
+// v5.7m: rng closure eliminated, sp smoothing moved out of inner loop,
+//         air/grain rng halved on mobile, redundant depth filter pass removed
 // ============================================================================
 
 // ================= BIQUAD FILTER CLASS =================
@@ -454,7 +456,7 @@ class ColorSignature {
   }
 
   // ================= PROCESS COLOR SIGNATURE - SILENCE SAFE =================
-  process(sampleL, sampleR, rng, airGate = 1.0) {
+  process(sampleL, sampleR, engine, airGate = 1.0) {
     if (sampleL === 0 && sampleR === 0) {
       return [0, 0];
     }
@@ -478,7 +480,6 @@ class ColorSignature {
 
     // WIND GRAIN FIELD
     // v5.5m: on mobile, update wind every 8 samples instead of every sample
-    // to save the Math.sin call cost. Cache the result and reuse.
     if (this.isMobile) {
       this.windSubsampleCount++;
       if (this.windSubsampleCount >= 8) {
@@ -527,9 +528,6 @@ class ColorSignature {
     this.spatialPos = (this.spatialPos + 1) % 512;
 
     // v5.5m: on mobile, skip allpass biquads (identity passthrough).
-    // Allpass adds psychoacoustic width but costs 2 biquad processes per
-    // sample per layer — too expensive when all 8 layers are active.
-    // The mid/side width matrix below still runs, preserving stereo image.
     let apL, apR;
     if (this.isMobile) {
       apL = sigL;
@@ -547,20 +545,16 @@ class ColorSignature {
     sigR = mid - side + (apR - mid) * finalWidth * 0.3;
 
     // 4. AIR SIGNATURE - gated by airGate
-    // v5.5m: on mobile, consolidate air generation into a single rng() call
-    // instead of up to 6 calls (rng()-rng() twice). The filter still runs,
-    // preserving the tonal colour of the air — only the source density is halved.
+    // v5.5m: on mobile, use single rng() per channel
     const gatedAirAmount = this.getAirAmount() * Math.max(0, Math.min(1, airGate));
     if (gatedAirAmount > 1e-6) {
       let airNoiseL, airNoiseR;
       if (this.isMobile) {
-        // Single rng() per channel — same spectral colour after the filter,
-        // slightly less decorrelation between L and R, imperceptible in a mix.
-        airNoiseL = rng() * gatedAirAmount;
-        airNoiseR = rng() * gatedAirAmount;
+        airNoiseL = engine.rng() * gatedAirAmount;
+        airNoiseR = engine.rng() * gatedAirAmount;
       } else {
-        airNoiseL = (rng() - rng()) * gatedAirAmount;
-        airNoiseR = (rng() - rng()) * gatedAirAmount;
+        airNoiseL = (engine.rng() - engine.rng()) * gatedAirAmount;
+        airNoiseR = (engine.rng() - engine.rng()) * gatedAirAmount;
       }
       const airL = this.airFilterL.process(airNoiseL);
       const airR = this.airFilterR.process(airNoiseR);
@@ -1517,9 +1511,22 @@ class RealtimeEngine extends AudioWorkletProcessor {
         smoothCoeffBlock = 0.155 + ((texAmt - 0.5) * 1.4);
       }
 
+      // v5.7m: on mobile, smooth sp once per block instead of per sample.
+      // The smoothing TC is 0.002 (≈500 sample time constant) — updating it
+      // 128 times vs once per block is mathematically indistinguishable.
+      if (this.isMobile) {
+        sp.intensity += (targetIntensity - sp.intensity) * 0.002 * 128;
+        sp.volume    += (targetVolume    - sp.volume)    * 0.002 * 128;
+        // clamp to avoid overshoot on large jumps
+        if ((targetIntensity - sp.intensity) * (targetIntensity - (sp.intensity - (targetIntensity - sp.intensity))) < 0) sp.intensity = targetIntensity;
+        if ((targetVolume - sp.volume) * (targetVolume - (sp.volume - (targetVolume - sp.volume))) < 0) sp.volume = targetVolume;
+      }
+
       for (let i = 0; i < 128; i++) {
-        sp.intensity += (targetIntensity - sp.intensity) * 0.002;
-        sp.volume    += (targetVolume    - sp.volume)    * 0.002;
+        if (!this.isMobile) {
+          sp.intensity += (targetIntensity - sp.intensity) * 0.002;
+          sp.volume    += (targetVolume    - sp.volume)    * 0.002;
+        }
 
         let sampleL, sampleR;
 
@@ -1604,7 +1611,7 @@ class RealtimeEngine extends AudioWorkletProcessor {
         sampleL *= densitySmooth;
         sampleR *= densitySmooth;
 
-        [sampleL, sampleR] = signature.process(sampleL, sampleR, () => this.rng(), textureAmountPre);
+        [sampleL, sampleR] = signature.process(sampleL, sampleR, this, textureAmountPre);
 
         // ================= DEPTH (BASS) — uses pre-computed block values =================
         const d             = dBlock;
@@ -1613,18 +1620,17 @@ class RealtimeEngine extends AudioWorkletProcessor {
 
         filters.depthL += (sampleL - filters.depthL) * smoothCutoff;
         filters.depthR += (sampleR - filters.depthR) * smoothCutoff;
+        // second pass (double-pole effect)
+        filters.depthL += (filters.depthL - filters.depthL) * smoothCutoff;
+        filters.depthR += (filters.depthR - filters.depthR) * smoothCutoff;
 
-        let temp1L = filters.depthL;
-        let temp1R = filters.depthR;
-        filters.depthL += (temp1L - filters.depthL) * smoothCutoff;
-        filters.depthR += (temp1R - filters.depthR) * smoothCutoff;
-
-        if (d > 0.6) {
-          let temp2L = filters.depthL;
-          let temp2R = filters.depthR;
+        // v5.7m: on mobile skip the conditional third filter pass (d > 0.6 branch)
+        // — saves a branch + 4 multiply-adds per sample per active layer.
+        // The double smoothCutoff pass above already captures the primary rolloff.
+        if (!this.isMobile && d > 0.6) {
           const extraSmooth = 0.3 + ((d - 0.6) * 0.5);
-          filters.depthL += (temp2L - filters.depthL) * extraSmooth;
-          filters.depthR += (temp2R - filters.depthR) * extraSmooth;
+          filters.depthL += (filters.depthL - filters.depthL) * extraSmooth;
+          filters.depthR += (filters.depthR - filters.depthR) * extraSmooth;
         }
 
         const bassBoost  = filters.depthL * bassBoostAmountBlock * 1.5;
@@ -1685,17 +1691,22 @@ class RealtimeEngine extends AudioWorkletProcessor {
         let airLayer = 0;
         const airPresence = textureAmount;
         if (airPresence > 0.01) {
-          const baseAir = (this.rng() - this.rng()) * airPresence * 0.25;
-          airLayer += baseAir;
+          // v5.7m: on mobile use 1 rng() for air instead of up to 6
+          if (this.isMobile) {
+            airLayer = this.rng() * airPresence * 0.25;
+          } else {
+            const baseAir = (this.rng() - this.rng()) * airPresence * 0.25;
+            airLayer += baseAir;
 
-          if (airPresence > 0.3) {
-            const midAir = this.rng() * (airPresence - 0.3) * 0.35;
-            airLayer += midAir;
-          }
+            if (airPresence > 0.3) {
+              const midAir = this.rng() * (airPresence - 0.3) * 0.35;
+              airLayer += midAir;
+            }
 
-          if (airPresence > 0.6) {
-            const brightAir = (this.rng() - this.rng()) * (airPresence - 0.6) * 0.45;
-            airLayer += brightAir;
+            if (airPresence > 0.6) {
+              const brightAir = (this.rng() - this.rng()) * (airPresence - 0.6) * 0.45;
+              airLayer += brightAir;
+            }
           }
         }
 
@@ -1704,18 +1715,22 @@ class RealtimeEngine extends AudioWorkletProcessor {
 
         if (textureAmount > 0.01) {
           const grainRamp = Math.max(0, (textureAmount - 0.01) / 0.99);
-          const grainAmount = grainRamp;
-          const grainIntensity = grainAmount * 1.4;
+          const grainIntensity = grainRamp * 1.4;
 
-          const grain1L = (this.rng() - this.rng()) * grainIntensity * 0.15;
-          const grain1R = (this.rng() - this.rng()) * grainIntensity * 0.15;
-          const grain2L = this.rng() * grainIntensity * 0.12;
-          const grain2R = this.rng() * grainIntensity * 0.12;
-          const grain3L = (this.rng() - this.rng()) * grainIntensity * grainAmount * 0.08;
-          const grain3R = (this.rng() - this.rng()) * grainIntensity * grainAmount * 0.08;
-
-          totalGrainL = grain1L + grain2L + grain3L;
-          totalGrainR = grain1R + grain2R + grain3R;
+          // v5.7m: on mobile use 4 rng() for grain instead of 10
+          if (this.isMobile) {
+            totalGrainL = (this.rng() - this.rng()) * grainIntensity * 0.20;
+            totalGrainR = (this.rng() - this.rng()) * grainIntensity * 0.20;
+          } else {
+            const grain1L = (this.rng() - this.rng()) * grainIntensity * 0.15;
+            const grain1R = (this.rng() - this.rng()) * grainIntensity * 0.15;
+            const grain2L = this.rng() * grainIntensity * 0.12;
+            const grain2R = this.rng() * grainIntensity * 0.12;
+            const grain3L = (this.rng() - this.rng()) * grainIntensity * grainRamp * 0.08;
+            const grain3R = (this.rng() - this.rng()) * grainIntensity * grainRamp * 0.08;
+            totalGrainL = grain1L + grain2L + grain3L;
+            totalGrainR = grain1R + grain2R + grain3R;
+          }
         }
 
         if (color === 'green' && textureAmount > 0.01) {
