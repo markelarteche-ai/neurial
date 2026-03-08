@@ -495,7 +495,7 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
       const f = ensureStableChain(ctx);
       const t = ctx.currentTime;
       f.bass.gain.setTargetAtTime((processing.bass-50)/5, t, 0.05);
-    }, 30);
+    }, 16);
   }, [layers, brainwaves, processing, isPlaying]);
 
   useEffect(() => {
@@ -761,23 +761,19 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
 
       // iOS requires resume() synchronously inside the gesture handler
       // We call it before any await to satisfy the user-gesture requirement
-      if (ctx.state === 'suspended') {
-        await ctx.resume();
-      }
-
       audioContextRef.current = ctx;
 
       const masterGain = ctx.createGain();
       masterGain.gain.value = 1;
       gainNodeRef.current = masterGain;
 
-      await ctx.audioWorklet.addModule('/realtime-engine.worklet.js');
-      workletLoadedRef.current = true;
+      try { await ctx.resume(); } catch {}
 
-      // After addModule (which is async), iOS may have suspended again — resume again
-      if (ctx.state === 'suspended') {
-        await ctx.resume();
-      }
+await ctx.audioWorklet.addModule('/realtime-engine.worklet.js');
+workletLoadedRef.current = true;
+
+// Resume #2: iOS Safari suspende el contexto de nuevo tras addModule
+try { await ctx.resume(); } catch {}
 
       const engine = new AudioWorkletNode(ctx, 'realtime-engine', {
         numberOfOutputs: 1,
@@ -792,9 +788,8 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
       masterGain.connect(ctx.destination);
 
       // Final resume check — some Android browsers need this
-      if (ctx.state === 'suspended') {
-        await ctx.resume();
-      }
+      // Resume #3: algunos Android Chrome necesitan esto tras crear el AudioWorkletNode
+try { await ctx.resume(); } catch {}
 
       // Force ALL layer intensities directly via setValueAtTime (instant, no ramp)
       // This bypasses the smoothedParams/densityRamp in the worklet on first boot
@@ -815,8 +810,8 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
       engine.port.postMessage({ type: 'warmup', samples: 4800 });
 
       forceParams();
-      setTimeout(() => { forceParams(); syncAllRealtimeParams(ctx); }, 80);
-      setTimeout(() => { forceParams(); syncAllRealtimeParams(ctx); }, 300);
+      setTimeout(() => { try { ctx.resume(); } catch {} forceParams(); syncAllRealtimeParams(ctx); }, 100);
+      setTimeout(() => { try { ctx.resume(); } catch {} forceParams(); syncAllRealtimeParams(ctx); }, 350);
       setTimeout(() => syncAllRealtimeParams(ctx), 800);
 
       setIsPlaying(true);
