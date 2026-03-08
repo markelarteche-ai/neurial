@@ -807,12 +807,30 @@ try { await ctx.resume(); } catch {}
       };
 
       // Send warmup message to worklet so filter states prime immediately
-      engine.port.postMessage({ type: 'warmup', samples: 4800 });
+      // Worklet sends 'ready' on its first process() call — guaranteed timing
+engine.port.onmessage = (e) => {
+  if (e.data.type === 'ready') {
+    forceParams();
+    syncAllRealtimeParams(ctx);
+    // Second sync 200ms later in case AudioContext was briefly suspended
+    setTimeout(() => {
+      if (mixerNodeRef.current && audioContextRef.current?.state === 'running') {
+        forceParams();
+        syncAllRealtimeParams(audioContextRef.current);
+      }
+    }, 200);
+  }
+};
 
-      forceParams();
-      setTimeout(() => { try { ctx.resume(); } catch {} forceParams(); syncAllRealtimeParams(ctx); }, 100);
-      setTimeout(() => { try { ctx.resume(); } catch {} forceParams(); syncAllRealtimeParams(ctx); }, 350);
-      setTimeout(() => syncAllRealtimeParams(ctx), 800);
+engine.port.postMessage({ type: 'warmup', samples: 4800 });
+
+// Fallback: si 'ready' nunca llega (no debería pasar, pero por seguridad)
+setTimeout(() => {
+  if (mixerNodeRef.current && audioContextRef.current?.state === 'running') {
+    forceParams();
+    syncAllRealtimeParams(audioContextRef.current);
+  }
+}, 2000);
 
       setIsPlaying(true);
       isPlayingRef.current = true;

@@ -966,6 +966,14 @@ class RealtimeEngine extends AudioWorkletProcessor {
 
   // ================= MAIN PROCESS =================
   process(inputs, outputs, parameters) {
+    // First block: notify React that worklet is alive and processing.
+    // This replaces all setTimeout-based forceParams retries in React —
+    // params sent after this message are guaranteed to land.
+    if (!this._ready) {
+      this._ready = true;
+      this.port.postMessage({ type: 'ready' });
+    }
+
     const output = outputs[0];
     const L = output[0];
     const R = output[1];
