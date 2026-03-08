@@ -725,8 +725,14 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
     }
   };
 
+  const playDebounceRef = useRef(false);
+
   const play = async () => {
     if (isTransitioning) return;
+    if (isGenerating) return;
+    if (playDebounceRef.current) return;
+    playDebounceRef.current = true;
+    setTimeout(() => { playDebounceRef.current = false; }, 1200);
     if (isPlaying) return stopSound();
 
     setIsTransitioning(true);
@@ -797,10 +803,18 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
 
     } catch (err) {
       console.error('Play error:', err);
+      // Clean up any partial audio context on error
+      try {
+        if (audioContextRef.current) {
+          audioContextRef.current.close();
+          audioContextRef.current = null;
+        }
+      } catch(e) {}
+    } finally {
+      setIsGenerating(false);
+      setIsTransitioning(false);
+      playDebounceRef.current = false;
     }
-
-    setIsGenerating(false);
-    setIsTransitioning(false);
   };
 
   const stopSound = () => {
@@ -1932,7 +1946,7 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
           <div style={{ padding: '24px 32px', borderTop: '1px solid rgba(250,204,21,0.2)', background: 'linear-gradient(to top,rgba(2,6,23,0.5),rgba(15,23,42,0.5))' }}>
             <button
               onClick={play}
-              disabled={isGenerating || isTransitioning}
+              disabled={isGenerating || isTransitioning || playDebounceRef.current}
               style={isPlaying ? {
                 width: '100%',
                 padding: '16px',
