@@ -750,6 +750,8 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
     lastPlayTimestamp.current = now;
     if (isTransitioning) return;
     if (isPlaying) return stopSound();
+    filterNodesRef.current = {};
+workletLoadedRef.current = false;
 
     setIsTransitioning(true);
     if (!workletLoadedRef.current) setIsGenerating(true);
@@ -820,11 +822,11 @@ engine.port.onmessage = (e) => {
     forceParams();
     syncAllRealtimeParams(ctx);
     setTimeout(() => {
-      if (mixerNodeRef.current && audioContextRef.current?.state === 'running') {
-        forceParams();
-        syncAllRealtimeParams(audioContextRef.current);
-      }
-    }, 200);
+  if (audioContextRef.current?.state === 'running' && mixerNodeRef.current) {
+    forceParams();
+    syncAllRealtimeParams(audioContextRef.current);
+  }
+}, 500);
   } else if (e.data.type === 'diagnostics') {
     console.log('🔍 WORKLET:', JSON.stringify(e.data));
   }
