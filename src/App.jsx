@@ -812,7 +812,6 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
     } finally {
       setIsGenerating(false);
       setIsTransitioning(false);
-      playDebounceRef.current = false;
     }
   };
 
