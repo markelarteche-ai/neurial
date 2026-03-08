@@ -475,19 +475,27 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
     return f;
   };
 
+  // Send a single param directly to worklet with smooth ramp - avoids zipper noise on mobile
+  const sendParam = (name, value) => {
+    const node = mixerNodeRef.current;
+    const ctx = audioContextRef.current;
+    if (!node || !ctx || ctx.state !== 'running') return;
+    node.parameters.get(name)?.setTargetAtTime(value, ctx.currentTime, 0.08);
+  };
+
   const syncThrottleRef = useRef(null);
   useEffect(() => {
     if (!isPlaying) return;
     const ctx = audioContextRef.current;
     if (!ctx) return;
-    // Throttle to max once every 60ms to avoid zipper noise from rapid slider moves on mobile
+    // Throttle to max once every 30ms to avoid zipper noise from rapid slider moves on mobile
     if (syncThrottleRef.current) clearTimeout(syncThrottleRef.current);
     syncThrottleRef.current = setTimeout(() => {
       syncAllRealtimeParams(ctx);
       const f = ensureStableChain(ctx);
       const t = ctx.currentTime;
       f.bass.gain.setTargetAtTime((processing.bass-50)/5, t, 0.05);
-    }, 60);
+    }, 30);
   }, [layers, brainwaves, processing, isPlaying]);
 
   useEffect(() => {
@@ -1720,17 +1728,17 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                         <div style={{ paddingBottom: '4px' }}>
                           <label style={{ display: 'block', fontSize: '12px', marginBottom: '8px', color: 'rgba(254,240,138,0.7)' }}>Intensity: <span {...NT}>{c.intensity}%</span></label>
-                          <input type="range" min="0" max="100" value={c.intensity} onInput={(e) => { const v = parseInt(e.target.value, 10); setLayers(pr => ({ ...pr, [t]: { ...pr[t], intensity: v } })); }} />
+                          <input type="range" min="0" max="100" value={c.intensity} onChange={(e) => { const v = parseInt(e.target.value); setLayers(pr => ({ ...pr, [t]: { ...pr[t], intensity: v } })); sendParam(`${t}_intensity`, v / 100); }} />
                         </div>
                         {c.intensity > 0 && (
                           <>
                             <div style={{ paddingBottom: '4px' }}>
                               <label style={{ display: 'block', fontSize: '12px', marginBottom: '8px', color: 'rgba(254,240,138,0.7)' }}>Volume: <span {...NT}>{c.volume}%</span></label>
-                              <input type="range" min="0" max="100" value={c.volume} onInput={(e) => { const v = parseInt(e.target.value, 10); setLayers(pr => ({ ...pr, [t]: { ...pr[t], volume: v } })); }} />
+                              <input type="range" min="0" max="100" value={c.volume} onChange={(e) => { const v = parseInt(e.target.value); setLayers(pr => ({ ...pr, [t]: { ...pr[t], volume: v } })); sendParam(`${t}_volume`, v / 100); }} />
                             </div>
                             <div style={{ paddingBottom: '4px' }}>
                               <label style={{ display: 'block', fontSize: '12px', marginBottom: '8px', color: 'rgba(254,240,138,0.7)' }}>Texture: <span {...NT}>{c.texture}%</span></label>
-                              <input type="range" min="0" max="100" value={c.texture} onInput={(e) => { const v = parseInt(e.target.value, 10); setLayers(pr => ({ ...pr, [t]: { ...pr[t], texture: v } })); }} />
+                              <input type="range" min="0" max="100" value={c.texture} onChange={(e) => { const v = parseInt(e.target.value); setLayers(pr => ({ ...pr, [t]: { ...pr[t], texture: v } })); sendParam(`${t}_texture`, v / 100); }} />
                             </div>
                           </>
                         )}
@@ -1807,15 +1815,15 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                           <div style={{ paddingBottom: '4px' }}>
                             <label style={{ display: 'block', fontSize: '12px', marginBottom: '8px', color: 'rgba(254,240,138,0.7)' }}>Carrier Frequency: <span {...NT}>{c.carrier} Hz</span></label>
-                            <input type="range" min="100" max="400" value={c.carrier} onInput={(e) => { const v = parseInt(e.target.value, 10); setBrainwaves(pr => ({ ...pr, [t]: { ...pr[t], carrier: v } })); }} />
+                            <input type="range" min="100" max="400" value={c.carrier} onChange={(e) => { const v = parseInt(e.target.value); setBrainwaves(pr => ({ ...pr, [t]: { ...pr[t], carrier: v } })); sendParam(`${t}_carrier`, v); }} />
                           </div>
                           <div style={{ paddingBottom: '4px' }}>
                             <label style={{ display: 'block', fontSize: '12px', marginBottom: '8px', color: 'rgba(254,240,138,0.7)' }}>Beat Frequency: <span {...NT}>{c.beat} Hz</span></label>
-                            <input type="range" min="1" max="40" value={c.beat} onInput={(e) => { const v = parseInt(e.target.value, 10); setBrainwaves(pr => ({ ...pr, [t]: { ...pr[t], beat: v } })); }} />
+                            <input type="range" min="1" max="40" value={c.beat} onChange={(e) => { const v = parseInt(e.target.value); setBrainwaves(pr => ({ ...pr, [t]: { ...pr[t], beat: v } })); sendParam(`${t}_beat`, v); }} />
                           </div>
                           <div style={{ paddingBottom: '4px' }}>
                             <label style={{ display: 'block', fontSize: '12px', marginBottom: '8px', color: 'rgba(254,240,138,0.7)' }}>Wave Intensity: <span {...NT}>{c.intensity}%</span></label>
-                            <input type="range" min="0" max="100" value={c.intensity} onInput={(e) => { const v = parseInt(e.target.value, 10); setBrainwaves(pr => ({ ...pr, [t]: { ...pr[t], intensity: v } })); }} />
+                            <input type="range" min="0" max="100" value={c.intensity} onChange={(e) => { const v = parseInt(e.target.value); setBrainwaves(pr => ({ ...pr, [t]: { ...pr[t], intensity: v } })); sendParam(`${t}_intensity`, v / 100); }} />
                           </div>
                         </div>
                       )}
