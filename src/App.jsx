@@ -736,8 +736,15 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
     setIsGenerating(true);
 
     try {
-      const ctx = new (window.AudioContext || window.webkitAudioContext)();
-      await ctx.resume();
+      // Create context immediately inside user gesture (critical for iOS/Android)
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      const ctx = new AudioCtx({ latencyHint: 'interactive', sampleRate: 44100 });
+
+      // iOS requires resume() synchronously inside the gesture handler
+      // We call it before any await to satisfy the user-gesture requirement
+      if (ctx.state === 'suspended') {
+        await ctx.resume();
+      }
 
       audioContextRef.current = ctx;
 
@@ -746,6 +753,11 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
       gainNodeRef.current = masterGain;
 
       await ctx.audioWorklet.addModule('/realtime-engine.worklet.js');
+
+      // After addModule (which is async), iOS may have suspended again — resume again
+      if (ctx.state === 'suspended') {
+        await ctx.resume();
+      }
 
       const engine = new AudioWorkletNode(ctx, 'realtime-engine', {
         numberOfOutputs: 1,
@@ -758,6 +770,11 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
 
       engine.connect(f.inGain);
       masterGain.connect(ctx.destination);
+
+      // Final resume check — some Android browsers need this
+      if (ctx.state === 'suspended') {
+        await ctx.resume();
+      }
 
       syncAllRealtimeParams(ctx);
 
