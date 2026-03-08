@@ -725,12 +725,12 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
     }
   };
 
-  const playDebounceRef = useRef(false);
+  const lastPlayTimestamp = useRef(0);
 
   const play = async () => {
-    if (playDebounceRef.current) return;
-    playDebounceRef.current = true;
-    setTimeout(() => { playDebounceRef.current = false; }, 1000);
+    const now = Date.now();
+    if (now - lastPlayTimestamp.current < 1000) return;
+    lastPlayTimestamp.current = now;
     if (isTransitioning) return;
     if (isPlaying) return stopSound();
 
