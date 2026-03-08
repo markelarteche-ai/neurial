@@ -422,32 +422,35 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
     const node = mixerNodeRef.current;
     if (!ctx || !node || ctx.state !== 'running') return;
     const t = ctx.currentTime;
+    // 0.05 timeConstant (~50ms) eliminates zipper noise on mobile
+    // where audio buffers are larger and parameter jumps are more audible
+    const TC = 0.05;
 
     Object.entries(layers).forEach(([k, c]) => {
-      node.parameters.get(`${k}_intensity`)?.setTargetAtTime((c.intensity ?? 0) / 100, t, 0.02);
-      node.parameters.get(`${k}_volume`)?.setTargetAtTime((c.volume ?? 100) / 100, t, 0.02);
-      node.parameters.get(`${k}_bass`)?.setTargetAtTime((c.bass ?? 50) / 100, t, 0.02);
-      node.parameters.get(`${k}_texture`)?.setTargetAtTime((c.texture ?? 50) / 100, t, 0.02);
+      node.parameters.get(`${k}_intensity`)?.setTargetAtTime((c.intensity ?? 0) / 100, t, TC);
+      node.parameters.get(`${k}_volume`)?.setTargetAtTime((c.volume ?? 100) / 100, t, TC);
+      node.parameters.get(`${k}_bass`)?.setTargetAtTime((c.bass ?? 50) / 100, t, TC);
+      node.parameters.get(`${k}_texture`)?.setTargetAtTime((c.texture ?? 50) / 100, t, TC);
     });
 
     Object.entries(brainwaves).forEach(([k, c]) => {
-      node.parameters.get(`${k}_enabled`)?.setTargetAtTime(c.enabled ? 1 : 0, t, 0.02);
-      node.parameters.get(`${k}_carrier`)?.setTargetAtTime(c.carrier ?? 200, t, 0.02);
-      node.parameters.get(`${k}_beat`)?.setTargetAtTime(c.beat ?? 10, t, 0.02);
-      node.parameters.get(`${k}_intensity`)?.setTargetAtTime((c.intensity ?? 50) / 100, t, 0.02);
+      node.parameters.get(`${k}_enabled`)?.setTargetAtTime(c.enabled ? 1 : 0, t, TC);
+      node.parameters.get(`${k}_carrier`)?.setTargetAtTime(c.carrier ?? 200, t, TC);
+      node.parameters.get(`${k}_beat`)?.setTargetAtTime(c.beat ?? 10, t, TC);
+      node.parameters.get(`${k}_intensity`)?.setTargetAtTime((c.intensity ?? 50) / 100, t, TC);
     });
 
-    node.parameters.get('stereoDecorr')?.setTargetAtTime((processing.stereoDecorr ?? 0) / 100, t, 0.02);
-    node.parameters.get('stereoWidth')?.setTargetAtTime((processing.stereoWidth ?? 100) / 50, t, 0.02);
-    node.parameters.get('harmonicSat')?.setTargetAtTime((processing.harmonicSat ?? 0) / 100, t, 0.02);
-    node.parameters.get('spectralDrift')?.setTargetAtTime((processing.spectralDrift ?? 0) / 100, t, 0.02);
-    node.parameters.get('temporalSmooth')?.setTargetAtTime((processing.temporalSmooth ?? 0) / 100, t, 0.02);
-    node.parameters.get('layerInteract')?.setTargetAtTime((processing.layerInteract ?? 0) / 100, t, 0.02);
-    node.parameters.get('microRandom')?.setTargetAtTime((processing.microRandom ?? 0) / 100, t, 0.02);
-    node.parameters.get('treble')?.setTargetAtTime((processing.treble ?? 55) / 100, t, 0.02);
-    node.parameters.get('mid')?.setTargetAtTime((processing.mid ?? 55) / 100, t, 0.02);
-    node.parameters.get('pressure')?.setTargetAtTime((processing.pressure ?? 50) / 100, t, 0.02);
-    node.parameters.get('master')?.setTargetAtTime(1, t, 0.02);
+    node.parameters.get('stereoDecorr')?.setTargetAtTime((processing.stereoDecorr ?? 0) / 100, t, TC);
+    node.parameters.get('stereoWidth')?.setTargetAtTime((processing.stereoWidth ?? 100) / 50, t, TC);
+    node.parameters.get('harmonicSat')?.setTargetAtTime((processing.harmonicSat ?? 0) / 100, t, TC);
+    node.parameters.get('spectralDrift')?.setTargetAtTime((processing.spectralDrift ?? 0) / 100, t, TC);
+    node.parameters.get('temporalSmooth')?.setTargetAtTime((processing.temporalSmooth ?? 0) / 100, t, TC);
+    node.parameters.get('layerInteract')?.setTargetAtTime((processing.layerInteract ?? 0) / 100, t, TC);
+    node.parameters.get('microRandom')?.setTargetAtTime((processing.microRandom ?? 0) / 100, t, TC);
+    node.parameters.get('treble')?.setTargetAtTime((processing.treble ?? 55) / 100, t, TC);
+    node.parameters.get('mid')?.setTargetAtTime((processing.mid ?? 55) / 100, t, TC);
+    node.parameters.get('pressure')?.setTargetAtTime((processing.pressure ?? 50) / 100, t, TC);
+    node.parameters.get('master')?.setTargetAtTime(1, t, TC);
   };
 
   const ensureStableChain = (ctx) => {
@@ -472,14 +475,19 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
     return f;
   };
 
+  const syncThrottleRef = useRef(null);
   useEffect(() => {
     if (!isPlaying) return;
     const ctx = audioContextRef.current;
     if (!ctx) return;
-    syncAllRealtimeParams(ctx);
-    const f = ensureStableChain(ctx);
-    const t = ctx.currentTime;
-    f.bass.gain.setTargetAtTime((processing.bass-50)/5, t, 0.02);
+    // Throttle to max once every 30ms to avoid zipper noise from rapid slider moves on mobile
+    if (syncThrottleRef.current) clearTimeout(syncThrottleRef.current);
+    syncThrottleRef.current = setTimeout(() => {
+      syncAllRealtimeParams(ctx);
+      const f = ensureStableChain(ctx);
+      const t = ctx.currentTime;
+      f.bass.gain.setTargetAtTime((processing.bass-50)/5, t, 0.05);
+    }, 30);
   }, [layers, brainwaves, processing, isPlaying]);
 
   useEffect(() => {
@@ -780,19 +788,28 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
         await ctx.resume();
       }
 
-      syncAllRealtimeParams(ctx);
+      // Force ALL layer intensities directly via setValueAtTime (instant, no ramp)
+      // This bypasses the smoothedParams/densityRamp in the worklet on first boot
+      const forceParams = () => {
+        const node = mixerNodeRef.current;
+        if (!node || ctx.state !== 'running') return;
+        const t = ctx.currentTime;
+        Object.entries(layers).forEach(([k, c]) => {
+          node.parameters.get(`${k}_intensity`)?.setValueAtTime((c.intensity ?? 0) / 100, t);
+          node.parameters.get(`${k}_volume`)?.setValueAtTime((c.volume ?? 100) / 100, t);
+          node.parameters.get(`${k}_bass`)?.setValueAtTime((c.bass ?? 50) / 100, t);
+          node.parameters.get(`${k}_texture`)?.setValueAtTime((c.texture ?? 50) / 100, t);
+        });
+        if (gainNodeRef.current) gainNodeRef.current.gain.setValueAtTime(1, t);
+      };
 
-      // Mobile fix: worklet processor may not be ready immediately after addModule.
-      // Re-sync params after short delays to ensure they land when the worklet is active.
-      setTimeout(() => syncAllRealtimeParams(ctx), 100);
-      setTimeout(() => syncAllRealtimeParams(ctx), 500);
-      setTimeout(() => {
-        syncAllRealtimeParams(ctx);
-        // Kick the gain node to wake up the audio graph on iOS/Android
-        if (gainNodeRef.current && ctx.state === 'running') {
-          gainNodeRef.current.gain.setValueAtTime(1, ctx.currentTime);
-        }
-      }, 1000);
+      // Send warmup message to worklet so filter states prime immediately
+      engine.port.postMessage({ type: 'warmup', samples: 4800 });
+
+      forceParams();
+      setTimeout(() => { forceParams(); syncAllRealtimeParams(ctx); }, 80);
+      setTimeout(() => { forceParams(); syncAllRealtimeParams(ctx); }, 300);
+      setTimeout(() => syncAllRealtimeParams(ctx), 800);
 
       setIsPlaying(true);
       isPlayingRef.current = true;
