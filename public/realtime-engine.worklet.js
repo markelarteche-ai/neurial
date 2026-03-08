@@ -11,6 +11,8 @@
 // v5.4:  per-color identity pass — broche final for pink/brown/black/blue/violet/grey/green
 // v5.5m: mobile CPU optimizations — air consolidation, wind subsampling,
 //         allpass bypass, spatial delay passthrough, applySpatialPsycho lite
+// v5.6m: motion LFO subsampling (biggest Math.sin savings), green breathing
+//         subsampling, depth/bass pre-computed per block, textureAmount pre-computed
 // ============================================================================
 
 // ================= BIQUAD FILTER CLASS =================
@@ -181,6 +183,9 @@ class ColorSignature {
     this.windSubsampleCount = 0;
     this.windCachedL = 0;
     this.windCachedR = 0;
+    // v5.6m: motion LFO subsampling (mobile only) — avoid 2 Math.sin/sample/layer
+    this.motionSubsampleCount = 0;
+    this.motionCached = 0;
 
     this.initializeSignatures();
   }
@@ -329,6 +334,24 @@ class ColorSignature {
 
     const speed = speeds[this.color] || 0.1;
 
+    // v5.6m: on mobile, update the motion LFO every 16 samples instead of
+    // every sample. This eliminates 2 Math.sin calls per layer per sample,
+    // the single biggest remaining cost with 8 active layers.
+    // LFO rates are 0.03–0.25 Hz — updating every 16 samples at 44.1kHz
+    // introduces zero audible aliasing (Nyquist for 16x subsampling = ~1378 Hz).
+    if (this.isMobile) {
+      this.motionSubsampleCount++;
+      if (this.motionSubsampleCount >= 16) {
+        this.motionSubsampleCount = 0;
+        this.motionPhase  += speed * 0.0001 * 16;
+        this.motionPhase2 += speed * 0.00015 * 16;
+        const lfo1 = Math.sin(this.motionPhase);
+        const lfo2 = Math.sin(this.motionPhase2);
+        this.motionCached = (lfo1 * 0.02 + lfo2 * 0.015);
+      }
+      return this.motionCached;
+    }
+
     this.motionPhase += speed * 0.0001;
     this.motionPhase2 += speed * 0.00015;
 
@@ -389,6 +412,9 @@ class ColorSignature {
     this.windSubsampleCount = 0;
     this.windCachedL = 0;
     this.windCachedR = 0;
+    // v5.6m
+    this.motionSubsampleCount = 0;
+    this.motionCached = 0;
   }
 
   // ================= SPECTRAL BREATHING =================
@@ -983,8 +1009,21 @@ class RealtimeEngine extends AudioWorkletProcessor {
     const rawGrain = this.rng();
     this.greenGrain[channel] = this.greenGrain[channel] * 0.88 + rawGrain * 0.12;
     this.greenGrainLowpass[channel] += (this.greenGrain[channel] - this.greenGrainLowpass[channel]) * 0.18;
-    this.greenBreathingPhase += 0.00004;
-    const breathing = 1.0 + Math.sin(this.greenBreathingPhase) * 0.03;
+
+    // v5.6m: on mobile update breathing Math.sin every 16 samples (L channel
+    // drives both; R reads the same cached value — imperceptible at 0.03 Hz).
+    let breathing;
+    if (this.isMobile) {
+      if (channel === 'L') {
+        this.greenBreathingPhase += 0.00004 * 16;
+        this._greenBreathingCached = 1.0 + Math.sin(this.greenBreathingPhase) * 0.03;
+      }
+      breathing = this._greenBreathingCached || 1.0;
+    } else {
+      this.greenBreathingPhase += 0.00004;
+      breathing = 1.0 + Math.sin(this.greenBreathingPhase) * 0.03;
+    }
+
     const grainIntensity = Math.pow(textureAmount, 1.2) * 0.25;
 
     return this.greenGrainLowpass[channel] * breathing * grainIntensity;
@@ -1414,6 +1453,70 @@ class RealtimeEngine extends AudioWorkletProcessor {
       const rampRaw = Math.max(0, Math.min(1, this.densityRamp[color]));
       const densitySmooth = rampRaw * rampRaw * (3 - 2 * rampRaw);
 
+      // v5.6m: pre-compute per-block values that are constant across all 128
+      // samples. bass/texture params only change between blocks via AudioParam
+      // smoothing, so computing them once per block is mathematically identical
+      // and saves 1 Math.pow + several multiply/branch ops per sample per layer.
+      const textureAmountBlock = Math.pow(texAmt, 0.60);
+      const grainMixBlock = texAmt * texAmt;
+
+      const depthAmountBlock = (color === 'brown') ? this.brownSmoothed.bass : bass;
+      const depthColorScale = {
+        white: 0.70, pink: 0.72, grey: 0.45, blue: 0.52,
+        violet: 0.55, green: 0.72, brown: 1.08, black: 1.18
+      }[color] || 1.0;
+      const dBlock = Math.max(0, Math.min(1, depthAmountBlock * depthColorScale));
+
+      let depthCurveBlock;
+      if (dBlock < 0.5) {
+        depthCurveBlock = Math.pow(dBlock * 2, 6.0) * 0.5;
+      } else {
+        const normalized = (dBlock - 0.5) * 2;
+        depthCurveBlock = 0.5 + (normalized * 0.5);
+      }
+
+      let smoothCutoffBlock = 0.95 - (depthCurveBlock * 0.85);
+      if (dBlock > 0.7) {
+        smoothCutoffBlock += ((dBlock - 0.7) / 0.3) * 0.08;
+      }
+
+      let bassBoostAmountBlock;
+      if (dBlock < 0.5) {
+        bassBoostAmountBlock = Math.pow(dBlock * 2, 7.0) * 0.5;
+      } else {
+        const normalized = (dBlock - 0.5) * 2;
+        bassBoostAmountBlock = 0.5 + (normalized * normalized * 0.5);
+        if (dBlock > 0.85) bassBoostAmountBlock *= (1.0 - ((dBlock - 0.85) * 0.4));
+      }
+
+      let densityCurveBlock;
+      if (dBlock < 0.5) {
+        densityCurveBlock = Math.pow(dBlock * 2, 6.5) * 0.5;
+      } else {
+        const normalized = (dBlock - 0.5) * 2;
+        densityCurveBlock = 0.5 + (Math.pow(normalized, 1.5) * 0.5);
+        if (dBlock > 0.8) densityCurveBlock *= (1.0 - ((dBlock - 0.8) * 0.35));
+      }
+
+      let blendAmountBlock;
+      if (dBlock < 0.5) {
+        blendAmountBlock = Math.pow(dBlock * 2, 5.5) * 0.5;
+      } else {
+        const normalized = (dBlock - 0.5) * 2;
+        blendAmountBlock = 0.5 + (Math.pow(normalized, 0.8) * 0.5);
+      }
+      if (color === 'green') blendAmountBlock *= 0.35;
+
+      let energyCompBlock = 1.0 / (1.0 + depthCurveBlock * 0.5);
+      if (dBlock > 0.75) energyCompBlock *= (1.0 - ((dBlock - 0.75) * 0.8 * 0.25));
+
+      let smoothCoeffBlock;
+      if (texAmt < 0.5) {
+        smoothCoeffBlock = 0.03 + (texAmt * 0.25);
+      } else {
+        smoothCoeffBlock = 0.155 + ((texAmt - 0.5) * 1.4);
+      }
+
       for (let i = 0; i < 128; i++) {
         sp.intensity += (targetIntensity - sp.intensity) * 0.002;
         sp.volume    += (targetVolume    - sp.volume)    * 0.002;
@@ -1503,30 +1606,10 @@ class RealtimeEngine extends AudioWorkletProcessor {
 
         [sampleL, sampleR] = signature.process(sampleL, sampleR, () => this.rng(), textureAmountPre);
 
-        // ================= DEPTH (BASS) =================
-        const depthAmount = (color === 'brown') ? this.brownSmoothed.bass : bass;
-
-        const depthColorScale = {
-          white: 0.70, pink: 0.72, grey: 0.45, blue: 0.52,
-          violet: 0.55, green: 0.72, brown: 1.08, black: 1.18
-        }[color] || 1.0;
-
-        const d = Math.max(0, Math.min(1, depthAmount * depthColorScale));
-
-        let depthCurve;
-        if (d < 0.5) {
-          depthCurve = Math.pow(d * 2, 6.0) * 0.5;
-        } else {
-          const normalized = (d - 0.5) * 2;
-          depthCurve = 0.5 + (normalized * 0.5);
-        }
-
-        let smoothCutoff = 0.95 - (depthCurve * 0.85);
-
-        if (d > 0.7) {
-          const highSmoothing = (d - 0.7) / 0.3;
-          smoothCutoff = smoothCutoff + (highSmoothing * 0.08);
-        }
+        // ================= DEPTH (BASS) — uses pre-computed block values =================
+        const d             = dBlock;
+        const depthCurve    = depthCurveBlock;
+        const smoothCutoff  = smoothCutoffBlock;
 
         filters.depthL += (sampleL - filters.depthL) * smoothCutoff;
         filters.depthR += (sampleR - filters.depthR) * smoothCutoff;
@@ -1544,62 +1627,20 @@ class RealtimeEngine extends AudioWorkletProcessor {
           filters.depthR += (temp2R - filters.depthR) * extraSmooth;
         }
 
-        let bassBoostAmount;
-        if (d < 0.5) {
-          bassBoostAmount = Math.pow(d * 2, 7.0) * 0.5;
-        } else {
-          const normalized = (d - 0.5) * 2;
-          bassBoostAmount = 0.5 + (normalized * normalized * 0.5);
+        const bassBoost  = filters.depthL * bassBoostAmountBlock * 1.5;
+        const bassBoostR = filters.depthR * bassBoostAmountBlock * 1.5;
 
-          if (d > 0.85) {
-            const limitFactor = 1.0 - ((d - 0.85) * 0.4);
-            bassBoostAmount *= limitFactor;
-          }
-        }
-
-        const bassBoost = filters.depthL * bassBoostAmount * 1.5;
-        const bassBoostR = filters.depthR * bassBoostAmount * 1.5;
-
-        let densityCurve;
-        if (d < 0.5) {
-          densityCurve = Math.pow(d * 2, 6.5) * 0.5;
-        } else {
-          const normalized = (d - 0.5) * 2;
-          densityCurve = 0.5 + (Math.pow(normalized, 1.5) * 0.5);
-
-          if (d > 0.8) {
-            const limitFactor = 1.0 - ((d - 0.8) * 0.35);
-            densityCurve *= limitFactor;
-          }
-        }
-
-        const densityL = filters.depthL * densityCurve * 2.0;
-        const densityR = filters.depthR * densityCurve * 2.0;
+        const densityL = filters.depthL * densityCurveBlock * 2.0;
+        const densityR = filters.depthR * densityCurveBlock * 2.0;
 
         const finalL = filters.depthL + bassBoost + densityL;
         const finalR = filters.depthR + bassBoostR + densityR;
 
-        let blendAmount;
-        if (d < 0.5) {
-          blendAmount = Math.pow(d * 2, 5.5) * 0.5;
-        } else {
-          const normalized = (d - 0.5) * 2;
-          blendAmount = 0.5 + (Math.pow(normalized, 0.8) * 0.5);
-        }
+        sampleL = sampleL * (1 - blendAmountBlock) + finalL * blendAmountBlock;
+        sampleR = sampleR * (1 - blendAmountBlock) + finalR * blendAmountBlock;
 
-        if (color === 'green') { blendAmount *= 0.35; }
-
-        sampleL = sampleL * (1 - blendAmount) + finalL * blendAmount;
-        sampleR = sampleR * (1 - blendAmount) + finalR * blendAmount;
-
-        let energyComp = 1.0 / (1.0 + depthCurve * 0.5);
-        if (d > 0.75) {
-          const extraComp = (d - 0.75) * 0.8;
-          energyComp *= (1.0 - extraComp * 0.25);
-        }
-
-        sampleL *= energyComp;
-        sampleR *= energyComp;
+        sampleL *= energyCompBlock;
+        sampleR *= energyCompBlock;
 
         // PATCH v5.2: ZERO-TEXTURE BLEED CLAMP (brown + black only)
         if ((color === 'brown' || color === 'black') && texAmt < 0.05) {
@@ -1637,14 +1678,9 @@ class RealtimeEngine extends AudioWorkletProcessor {
           }
         }
 
-        const textureAmount = Math.pow(texAmt, 0.60);
+        const textureAmount = textureAmountBlock;
 
-        let smoothCoeff;
-        if (texAmt < 0.5) {
-          smoothCoeff = 0.03 + (texAmt * 0.25);
-        } else {
-          smoothCoeff = 0.155 + ((texAmt - 0.5) * 1.4);
-        }
+        const smoothCoeff = smoothCoeffBlock;
 
         let airLayer = 0;
         const airPresence = textureAmount;
@@ -1689,7 +1725,7 @@ class RealtimeEngine extends AudioWorkletProcessor {
           totalGrainR = totalGrainR * 0.5 + greenOrganicR * 0.5;
         }
 
-        const grainMix = texAmt * texAmt;
+        const grainMix = grainMixBlock;
 
         if (color === 'white' || color === 'blue' || color === 'violet') {
           const fixedCoeff = (color === 'white') ? 0.25 : 0.04;
