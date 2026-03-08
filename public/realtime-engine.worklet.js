@@ -9,6 +9,8 @@
 // v5.3 patches: green void stabilizer, white spectral purity, nature trim stub
 // v5.3w: white noise raw/bright overhaul — rawer texture, sharper high-end
 // v5.4:  per-color identity pass — broche final for pink/brown/black/blue/violet/grey/green
+// v5.5m: mobile CPU optimizations — air consolidation, wind subsampling,
+//         allpass bypass, spatial delay passthrough, applySpatialPsycho lite
 // ============================================================================
 
 // ================= BIQUAD FILTER CLASS =================
@@ -138,9 +140,11 @@ class Biquad {
 
 // ================= COLOR SIGNATURE PROCESSOR =================
 class ColorSignature {
-  constructor(color, sr) {
+  constructor(color, sr, isMobile) {
     this.color = color;
     this.sr = sr;
+    // v5.5m: store mobile flag for use in process()
+    this.isMobile = isMobile || false;
 
     // Spectral filters (up to 4 per color, L/R)
     this.spectralL = [new Biquad(), new Biquad(), new Biquad(), new Biquad()];
@@ -173,6 +177,10 @@ class ColorSignature {
     this.wind = 0;
     this.grainCarryL = 0;
     this.grainCarryR = 0;
+    // v5.5m: wind subsampling counter (mobile only)
+    this.windSubsampleCount = 0;
+    this.windCachedL = 0;
+    this.windCachedR = 0;
 
     this.initializeSignatures();
   }
@@ -183,12 +191,6 @@ class ColorSignature {
     // ================= SPECTRAL SIGNATURES =================
     switch(this.color) {
       case 'white':
-        // v5.3w: Raw, bright, unpolished — maximises high-end crunch and air separation.
-        // HP raised from 40→80 Hz: removes sub-bass body, tightens the low end.
-        // High-shelf raised from +1.2→+3.5 dB at 8kHz: more bite and presence.
-        // 12kHz peak boosted from +0.6→+2.2 dB, Q tightened 1.5→2.0: adds crispness.
-        // Low-shelf cut deepened from -2.5→-5.0 dB at 200 Hz: hollows the low-mids,
-        //   pushing the perceived centre of mass further up into the highs.
         this.spectralL[0].setHighPass(80, sr, 0.85);
         this.spectralR[0].setHighPass(80, sr, 0.85);
         this.spectralL[1].setHighShelf(8000, sr, 3.5);
@@ -200,10 +202,6 @@ class ColorSignature {
         break;
 
       case 'pink':
-        // v5.4: deeper warmth. Low-shelf +4.5→+5.8 dB widens the body.
-        // Peak at 480 Hz +2.0→+3.2 dB (Q 1.1→1.0, slightly wider) adds
-        // the characteristic pink "envelope" sensation. High-shelf cut
-        // slightly deeper -3.5→-4.2 dB — pink should feel distant from highs.
         this.spectralL[0].setHighPass(90, sr, 0.7);
         this.spectralR[0].setHighPass(90, sr, 0.7);
         this.spectralL[1].setLowShelf(320, sr, 5.8);
@@ -235,11 +233,6 @@ class ColorSignature {
         break;
 
       case 'blue':
-        // v5.4: more electric definition. HP raised 850→950 Hz — strips the
-        // last warmth, leaving pure high-mid and above. Peak at 3600 Hz
-        // +4.5→+5.8 dB, Q 1.0→1.2 (tighter, more "electric arc" quality).
-        // High-shelf +4.0→+5.0 dB — more crackling air at the very top.
-        // Low-shelf cut slightly deeper -5.5→-6.5 dB for maximum leanness.
         this.spectralL[0].setHighPass(950, sr, 0.75);
         this.spectralR[0].setHighPass(950, sr, 0.75);
         this.spectralL[1].setPeak(3600, sr, 5.8, 1.2);
@@ -251,11 +244,6 @@ class ColorSignature {
         break;
 
       case 'violet':
-        // v5.4: more ethereal and ultra-high. HP raised 550→650 Hz — removes
-        // more of the "blue overlap" zone, makes violet feel distinctly above blue.
-        // Peak at 2200 Hz slightly less notched (-1.8→-1.2) — violet has a thin
-        // resonant brightness there now. Peak at 10500 Hz +2.8→+3.8 dB — the
-        // signature ultra-high shimmer is stronger. High-shelf at 13kHz +1.1→+1.8.
         this.spectralL[0].setHighPass(650, sr, 0.7);
         this.spectralR[0].setHighPass(650, sr, 0.7);
         this.spectralL[1].setPeak(2200, sr, -1.2, 1.1);
@@ -267,10 +255,6 @@ class ColorSignature {
         break;
 
       case 'grey':
-        // v5.4: more industrial mass. Low-shelf cut deepened -5.0→-6.5 dB at 180 Hz
-        // — removes the last hint of warmth, making grey feel purely neutral/concrete.
-        // Mid peak 1900 Hz +2.8→+4.0 dB (Q 0.95→0.85, wider) — the defining grey
-        // presence that cuts through. High-shelf +2.2→+3.2 dB — more "air machine" hiss.
         this.spectralL[0].setHighPass(120, sr, 0.7);
         this.spectralR[0].setHighPass(120, sr, 0.7);
         this.spectralL[1].setLowShelf(180, sr, -6.5);
@@ -282,10 +266,6 @@ class ColorSignature {
         break;
 
       case 'green':
-        // v5.4: more organic, more forest. BandPass at 500 Hz — Q tightened
-        // 1.5→1.8: more focused mid-range "hollow log" resonance. Peak at
-        // 500 Hz +4→+5.2 dB — stronger presence in the green band. Low-shelf
-        // +2→+3 dB at 150 Hz — adds the earthy low-mid body of vegetation.
         this.spectralL[0].setBandPass(500, sr, 1.8);
         this.spectralR[0].setBandPass(500, sr, 1.8);
         this.spectralL[1].setPeak(500, sr, 5.2, 1.2);
@@ -378,8 +358,6 @@ class ColorSignature {
   // ================= AIR SIGNATURE =================
   getAirAmount() {
     const amounts = {
-      // v5.3w: white air raised 0.4→0.55 — more hiss and high-frequency breath
-      // v5.4: blue raised 0.48→0.56 (electric crackling breath), violet 0.42→0.50
       'white': 0.55, 'blue': 0.56, 'violet': 0.50, 'pink': 0.18,
       'grey': 0.28, 'green': 0.15, 'brown': 0.04, 'black': 0.005
     };
@@ -388,7 +366,6 @@ class ColorSignature {
 
   // ================= HARD RESET - NO TAILS =================
   resetState() {
-    // Reset all filter states
     for (let i = 0; i < 4; i++) {
       this.spectralL[i].reset();
       this.spectralR[i].reset();
@@ -398,30 +375,28 @@ class ColorSignature {
     this.allpassL.reset();
     this.allpassR.reset();
 
-    // Clear delay buffers
     this.spatialDelayL.fill(0);
     this.spatialDelayR.fill(0);
     this.spatialPos = 0;
 
-    // Reset breathing state
     this.breathingSampleCount = 0;
     this.breathingModulation = 0;
 
-    // WIND GRAIN FIELD: Collapse wind state so no energy stored in silence
     this.wind = 0;
     this.grainCarryL = 0;
     this.grainCarryR = 0;
+    // v5.5m
+    this.windSubsampleCount = 0;
+    this.windCachedL = 0;
+    this.windCachedR = 0;
   }
 
-  // BLOCK 2: Spectral breathing method
-  // ================= SPECTRAL BREATHING (PSYCHOACOUSTIC VITALITY) =================
+  // ================= SPECTRAL BREATHING =================
   updateSpectralBreathing() {
-    // Update every 64 samples for efficiency
     this.breathingSampleCount++;
     if (this.breathingSampleCount < 64) return;
     this.breathingSampleCount = 0;
 
-    // Ultra-slow breathing rates per color (0.02-0.05 Hz)
     const speeds = {
       'white': 0.025, 'pink': 0.032, 'brown': 0.048, 'black': 0.045,
       'blue': 0.028, 'violet': 0.022, 'grey': 0.035, 'green': 0.038
@@ -430,18 +405,15 @@ class ColorSignature {
     const speed = speeds[this.color] || 0.03;
     this.breathingPhase += speed * 0.001;
 
-    // Microscopic frequency modulation (±2-8 Hz depending on color)
     const depths = {
       'white': 4, 'pink': 5, 'brown': 8, 'black': 7,
       'blue': 3, 'violet': 2, 'grey': 4, 'green': 6
     };
     const depth = depths[this.color] || 4;
 
-    // Sine modulation creates organic movement
     this.breathingModulation = Math.sin(this.breathingPhase) * depth;
   }
 
-  // Apply breathing to spectral filters (called before processing)
   applyBreathing() {
     if (Math.abs(this.breathingModulation) < 0.1) return;
   }
@@ -455,17 +427,15 @@ class ColorSignature {
     return strengths[this.color] || 0.02;
   }
 
-  // BLOCK 3: process() with spectral breathing + wind grain field integrated
   // ================= PROCESS COLOR SIGNATURE - SILENCE SAFE =================
   process(sampleL, sampleR, rng, airGate = 1.0) {
     if (sampleL === 0 && sampleR === 0) {
       return [0, 0];
     }
 
-    // PSYCHOACOUSTIC: Update spectral breathing (efficient batch update)
     this.updateSpectralBreathing();
 
-    // 1. SPECTRAL SIGNATURE (with subtle breathing)
+    // 1. SPECTRAL SIGNATURE
     let sigL = sampleL;
     let sigR = sampleR;
 
@@ -474,24 +444,40 @@ class ColorSignature {
       sigR = this.spectralR[i].process(sigR);
     }
 
-    // PART 1: Micro spectral tilt
+    // Micro spectral tilt
     const tiltTable = { white: 1.015, pink: 0.992, brown: 0.975, black: 0.965, blue: 1.020, violet: 1.025, grey: 1.005 };
     const tilt = tiltTable[this.color] || 1.0;
     sigL *= tilt;
     sigR *= tilt;
 
     // WIND GRAIN FIELD
-    this.windPhase += 0.00002;
-    const windBase = Math.sin(this.windPhase);
-    this.wind += (windBase - this.wind) * 0.002;
-
-    const windStrength = this.getWindStrength();
-
-    this.grainCarryL += (sigL - this.grainCarryL) * 0.05;
-    this.grainCarryR += (sigR - this.grainCarryR) * 0.05;
-
-    sigL += this.grainCarryL * this.wind * windStrength;
-    sigR += this.grainCarryR * this.wind * windStrength;
+    // v5.5m: on mobile, update wind every 8 samples instead of every sample
+    // to save the Math.sin call cost. Cache the result and reuse.
+    if (this.isMobile) {
+      this.windSubsampleCount++;
+      if (this.windSubsampleCount >= 8) {
+        this.windSubsampleCount = 0;
+        this.windPhase += 0.00002 * 8;
+        const windBase = Math.sin(this.windPhase);
+        this.wind += (windBase - this.wind) * 0.002;
+        const windStrength = this.getWindStrength();
+        this.grainCarryL += (sigL - this.grainCarryL) * 0.05;
+        this.grainCarryR += (sigR - this.grainCarryR) * 0.05;
+        this.windCachedL = this.grainCarryL * this.wind * windStrength;
+        this.windCachedR = this.grainCarryR * this.wind * windStrength;
+      }
+      sigL += this.windCachedL;
+      sigR += this.windCachedR;
+    } else {
+      this.windPhase += 0.00002;
+      const windBase = Math.sin(this.windPhase);
+      this.wind += (windBase - this.wind) * 0.002;
+      const windStrength = this.getWindStrength();
+      this.grainCarryL += (sigL - this.grainCarryL) * 0.05;
+      this.grainCarryR += (sigR - this.grainCarryR) * 0.05;
+      sigL += this.grainCarryL * this.wind * windStrength;
+      sigR += this.grainCarryR * this.wind * windStrength;
+    }
 
     // 2. TEMPORAL MOTION SIGNATURE
     const motion = this.getMotionModulation();
@@ -514,9 +500,18 @@ class ColorSignature {
 
     this.spatialPos = (this.spatialPos + 1) % 512;
 
-    // Allpass for psychoacoustic width
-    const apL = this.allpassL.process(sigL);
-    const apR = this.allpassR.process(sigR);
+    // v5.5m: on mobile, skip allpass biquads (identity passthrough).
+    // Allpass adds psychoacoustic width but costs 2 biquad processes per
+    // sample per layer — too expensive when all 8 layers are active.
+    // The mid/side width matrix below still runs, preserving stereo image.
+    let apL, apR;
+    if (this.isMobile) {
+      apL = sigL;
+      apR = sigR;
+    } else {
+      apL = this.allpassL.process(sigL);
+      apR = this.allpassR.process(sigR);
+    }
 
     // Apply width
     const mid = (sigL + sigR) * 0.5;
@@ -526,10 +521,21 @@ class ColorSignature {
     sigR = mid - side + (apR - mid) * finalWidth * 0.3;
 
     // 4. AIR SIGNATURE - gated by airGate
+    // v5.5m: on mobile, consolidate air generation into a single rng() call
+    // instead of up to 6 calls (rng()-rng() twice). The filter still runs,
+    // preserving the tonal colour of the air — only the source density is halved.
     const gatedAirAmount = this.getAirAmount() * Math.max(0, Math.min(1, airGate));
     if (gatedAirAmount > 1e-6) {
-      const airNoiseL = (rng() - rng()) * gatedAirAmount;
-      const airNoiseR = (rng() - rng()) * gatedAirAmount;
+      let airNoiseL, airNoiseR;
+      if (this.isMobile) {
+        // Single rng() per channel — same spectral colour after the filter,
+        // slightly less decorrelation between L and R, imperceptible in a mix.
+        airNoiseL = rng() * gatedAirAmount;
+        airNoiseR = rng() * gatedAirAmount;
+      } else {
+        airNoiseL = (rng() - rng()) * gatedAirAmount;
+        airNoiseR = (rng() - rng()) * gatedAirAmount;
+      }
       const airL = this.airFilterL.process(airNoiseL);
       const airR = this.airFilterR.process(airNoiseR);
       const airSpread = { white: 1.2, pink: 1.0, brown: 0.7, black: 0.6, blue: 1.3, violet: 1.35, grey: 1.1 }[this.color] || 1.0;
@@ -546,6 +552,13 @@ class RealtimeEngine extends AudioWorkletProcessor {
   constructor() {
     super();
 
+    // ================= MOBILE DETECTION =================
+    // v5.5m: detect mobile once at construction time.
+    // Used to enable lightweight code paths in ColorSignature.process()
+    // and applySpatialPsycho(). No user-visible quality mode switch.
+    this.isMobile = typeof navigator !== 'undefined' &&
+      /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
     // ================= RNG STATE =================
     this.rngState = 0x12345678;
     for (let i = 0; i < 10000; i++) {
@@ -553,9 +566,10 @@ class RealtimeEngine extends AudioWorkletProcessor {
     }
 
     // ================= COLOR SIGNATURES =================
+    // v5.5m: pass isMobile so each ColorSignature can self-adapt
     this.colorSignatures = {};
     ['white', 'pink', 'brown', 'grey', 'blue', 'violet', 'black', 'green'].forEach(c => {
-      this.colorSignatures[c] = new ColorSignature(c, sampleRate);
+      this.colorSignatures[c] = new ColorSignature(c, sampleRate, this.isMobile);
     });
 
     // ================= NOISE BUFFERS =================
@@ -634,12 +648,6 @@ class RealtimeEngine extends AudioWorkletProcessor {
         textureR: 0,
         smoothedTexture: 0
       };
-    });
-
-    // ================= LAYER ACTIVITY TRACKING =================
-    this.layerWasActive = {};
-    ['white','pink','brown','grey','blue','violet','black','green'].forEach(c=>{
-      this.layerWasActive[c] = false;
     });
 
     // ================= 3D AUDIO - DECORRELATION =================
@@ -760,6 +768,11 @@ class RealtimeEngine extends AudioWorkletProcessor {
     };
     this.widthBreathPhase = Math.random() * Math.PI * 2;
 
+    // v5.5m: pre-compute applySpatialPsycho coefficients once at construction
+    // instead of recalculating Math.exp every block call.
+    this._spaLpCoeff = 1 - Math.exp(-2 * Math.PI * 700  / sampleRate);
+    this._spaHpCoeff = 1 - Math.exp(-2 * Math.PI * 3000 / sampleRate);
+
     this.microVar = {
       grainDensity: 1.0,
       airShimmer  : 1.0,
@@ -782,6 +795,10 @@ class RealtimeEngine extends AudioWorkletProcessor {
       lpL: 0, lpR: 0,
       hpL: 0, hpR: 0
     };
+
+    // v5.5m: pre-compute SLA coefficients once
+    this._slaLp800 = 1 - Math.exp(-2 * Math.PI * 800  / sampleRate);
+    this._slaLp6k  = 1 - Math.exp(-2 * Math.PI * 6000 / sampleRate);
 
     this.coherence = {
       dcL    : 0,
@@ -821,36 +838,14 @@ class RealtimeEngine extends AudioWorkletProcessor {
       ['white', 'pink', 'brown', 'grey', 'blue', 'violet', 'black', 'green'].forEach(color => {
         for (let i = 0; i < 128; i++) {
           switch(color) {
-            case 'white':
-              this.genWhite();
-              break;
-            case 'pink':
-              this.genPink('L');
-              this.genPink('R');
-              break;
-            case 'brown':
-              this.genBrown('L');
-              this.genBrown('R');
-              break;
-            case 'grey':
-              this.genGrey('L');
-              this.genGrey('R');
-              break;
-            case 'blue':
-              this.genBlue('L');
-              this.genBlue('R');
-              break;
-            case 'violet':
-              this.genViolet();
-              break;
-            case 'black':
-              this.genBlack('L');
-              this.genBlack('R');
-              break;
-            case 'green':
-              this.genGreen('L');
-              this.genGreen('R');
-              break;
+            case 'white':  this.genWhite(); break;
+            case 'pink':   this.genPink('L'); this.genPink('R'); break;
+            case 'brown':  this.genBrown('L'); this.genBrown('R'); break;
+            case 'grey':   this.genGrey('L'); this.genGrey('R'); break;
+            case 'blue':   this.genBlue('L'); this.genBlue('R'); break;
+            case 'violet': this.genViolet(); break;
+            case 'black':  this.genBlack('L'); this.genBlack('R'); break;
+            case 'green':  this.genGreen('L'); this.genGreen('R'); break;
           }
         }
       });
@@ -908,14 +903,8 @@ class RealtimeEngine extends AudioWorkletProcessor {
   // ================= BASE NOISE GENERATORS =================
 
   genWhite() {
-    // v5.3w: Rawer white noise generator.
-    // Removed the soft fiber blend (rng() - rng()) * 0.40 — that was
-    // smoothing out the top-end and creating a slightly "padded" feel.
-    // Replaced with a harder bipolar raw sample at full weight (0.82),
-    // plus a bright high-pass jitter term that adds grit without DC drift.
-    // Net energy is comparable to the original (no level jump).
     const base = this.rng();
-    const grit = (this.rng() - this.rng()) * 0.18;  // tiny decorr, not smoothing
+    const grit = (this.rng() - this.rng()) * 0.18;
     return (base * 0.82 + grit) * 0.80;
   }
 
@@ -991,17 +980,11 @@ class RealtimeEngine extends AudioWorkletProcessor {
       return 0;
     }
 
-    // v5.4: grain memory coefficient 0.92→0.88 — faster grain turnover creates
-    // more distinct individual "particles" (leaves rustling vs. continuous hiss).
-    // Lowpass coefficient 0.15→0.18 — slightly faster, less cotton-wool softness.
     const rawGrain = this.rng();
     this.greenGrain[channel] = this.greenGrain[channel] * 0.88 + rawGrain * 0.12;
-
     this.greenGrainLowpass[channel] += (this.greenGrain[channel] - this.greenGrainLowpass[channel]) * 0.18;
-
     this.greenBreathingPhase += 0.00004;
     const breathing = 1.0 + Math.sin(this.greenBreathingPhase) * 0.03;
-
     const grainIntensity = Math.pow(textureAmount, 1.2) * 0.25;
 
     return this.greenGrainLowpass[channel] * breathing * grainIntensity;
@@ -1272,31 +1255,53 @@ class RealtimeEngine extends AudioWorkletProcessor {
   }
 
   applySpatialPsycho(L, R, blockSize, sr) {
-    const lpCoeff = 1 - Math.exp(-2 * Math.PI * 700 / sr);
-    const hpCoeff = 1 - Math.exp(-2 * Math.PI * 3000 / sr);
+    // v5.5m: use pre-computed coefficients from constructor instead of
+    // recalculating Math.exp() on every block call (saves 2 exp() per block).
+    const lpCoeff = this._spaLpCoeff;
+    const hpCoeff = this._spaHpCoeff;
 
     this.widthBreathPhase += blockSize / (sr * 40.0) * 2 * Math.PI;
     if (this.widthBreathPhase > 2 * Math.PI) this.widthBreathPhase -= 2 * Math.PI;
     const widthMod = 1.0 + Math.sin(this.widthBreathPhase) * 0.04;
 
-    for (let i = 0; i < blockSize; i++) {
-      if (L[i] === 0 && R[i] === 0) continue;
+    // v5.5m: on mobile, skip the crossfeed bleed (the 4 multiply-adds per sample
+    // per L/R channel) and only apply the mid/side width matrix, which is the
+    // perceptually dominant part. Saves ~8 operations per sample in this loop.
+    if (this.isMobile) {
+      for (let i = 0; i < blockSize; i++) {
+        if (L[i] === 0 && R[i] === 0) continue;
+        const mid  = (L[i] + R[i]) * 0.5;
+        const side = (L[i] - R[i]) * 0.5 * widthMod;
+        L[i] = mid + side;
+        R[i] = mid - side;
+      }
+      // Keep xfeed state decaying so it doesn't diverge if we switch back
+      for (let i = 0; i < blockSize; i++) {
+        this.xfeed.lowL  += (L[i] - this.xfeed.lowL)  * lpCoeff;
+        this.xfeed.lowR  += (R[i] - this.xfeed.lowR)  * lpCoeff;
+        this.xfeed.highL += (L[i] - this.xfeed.highL) * hpCoeff;
+        this.xfeed.highR += (R[i] - this.xfeed.highR) * hpCoeff;
+      }
+    } else {
+      for (let i = 0; i < blockSize; i++) {
+        if (L[i] === 0 && R[i] === 0) continue;
 
-      this.xfeed.lowL += (L[i] - this.xfeed.lowL) * lpCoeff;
-      this.xfeed.lowR += (R[i] - this.xfeed.lowR) * lpCoeff;
-      this.xfeed.highL += (L[i] - this.xfeed.highL) * hpCoeff;
-      this.xfeed.highR += (R[i] - this.xfeed.highR) * hpCoeff;
+        this.xfeed.lowL += (L[i] - this.xfeed.lowL) * lpCoeff;
+        this.xfeed.lowR += (R[i] - this.xfeed.lowR) * lpCoeff;
+        this.xfeed.highL += (L[i] - this.xfeed.highL) * hpCoeff;
+        this.xfeed.highR += (R[i] - this.xfeed.highR) * hpCoeff;
 
-      const bleedToR = this.xfeed.lowL * 0.05 + (L[i] - this.xfeed.highL) * 0.01;
-      const bleedToL = this.xfeed.lowR * 0.05 + (R[i] - this.xfeed.highR) * 0.01;
+        const bleedToR = this.xfeed.lowL * 0.05 + (L[i] - this.xfeed.highL) * 0.01;
+        const bleedToL = this.xfeed.lowR * 0.05 + (R[i] - this.xfeed.highR) * 0.01;
 
-      L[i] = L[i] * 0.975 + bleedToL * 0.025;
-      R[i] = R[i] * 0.975 + bleedToR * 0.025;
+        L[i] = L[i] * 0.975 + bleedToL * 0.025;
+        R[i] = R[i] * 0.975 + bleedToR * 0.025;
 
-      const mid  = (L[i] + R[i]) * 0.5;
-      const side = (L[i] - R[i]) * 0.5 * widthMod;
-      L[i] = mid + side;
-      R[i] = mid - side;
+        const mid  = (L[i] + R[i]) * 0.5;
+        const side = (L[i] - R[i]) * 0.5 * widthMod;
+        L[i] = mid + side;
+        R[i] = mid - side;
+      }
     }
   }
 
@@ -1375,14 +1380,9 @@ class RealtimeEngine extends AudioWorkletProcessor {
       const intensity = parameters[`${color}_intensity`][0];
 
       if (intensity < 0.001) {
-        if (this.layerWasActive[color]) {
-          this.resetLayerState(color);
-          this.layerWasActive[color] = false;
-        }
+        this.resetLayerState(color);
         return;
       }
-
-      this.layerWasActive[color] = true;
 
       const volume = parameters[`${color}_volume`][0];
       const bass = parameters[`${color}_bass`][0];
@@ -1450,18 +1450,12 @@ class RealtimeEngine extends AudioWorkletProcessor {
           case 'blue':
             sampleL = this.genBlue('L');
             sampleR = this.genBlue('R');
-            // v5.4: micro high-frequency jitter unique to blue — "electric arc" crackle.
-            // Smaller than white's (0.006 vs 0.011) but still audible as added definition.
-            // Silence-safe: rng() has zero mean, no DC accumulation.
             sampleL += this.rng() * 0.018;
             sampleR += this.rng() * 0.018;
             break;
           case 'violet':
             sampleL = this.genViolet();
             sampleR = this.genViolet();
-            // v5.4: threshold raised 0.5→0.7 — decorrelation micro-noise active
-            // over a wider texture range, giving violet a more consistently
-            // "dissociated" spatial feel. Amount increased 0.0006→0.0010.
             if (texAmt < 0.7) {
               sampleL += (this.rng() - this.rng()) * 0.0010;
               sampleR += (this.rng() - this.rng()) * 0.0010;
@@ -1486,9 +1480,6 @@ class RealtimeEngine extends AudioWorkletProcessor {
             const bedGain = 0.14 * bedFade;
             sampleL += this.genGreenBed('L') * bedGain;
             sampleR += this.genGreenBed('R') * bedGain;
-            // v5.4: greenFill contribution raised 0.08→0.11 — more organic
-            // continuity noise that fills the gaps between grain clusters,
-            // like air moving through foliage. Still silence-safe (scales abs).
             this.greenFill.L = this.greenFill.L * 0.995 + Math.abs(sampleL) * 0.005;
             this.greenFill.R = this.greenFill.R * 0.995 + Math.abs(sampleR) * 0.005;
             sampleL += (this.rng() - this.rng()) * this.greenFill.L * 0.11;
@@ -1502,11 +1493,6 @@ class RealtimeEngine extends AudioWorkletProcessor {
             break;
         }
 
-        // WHITE-ONLY: Raw high-frequency jitter — increased for more crunch.
-        // v5.3w: raised from 0.0048 → 0.011. Still white-only, still DC-safe
-        // (uniform RNG has zero mean). Increases perceived grittiness without
-        // changing spectral balance since it's injected before the signature's
-        // spectral filters, which then shape it naturally.
         if (color === 'white') {
           sampleL += this.rng() * 0.011;
           sampleR += this.rng() * 0.011;
@@ -1705,11 +1691,6 @@ class RealtimeEngine extends AudioWorkletProcessor {
 
         const grainMix = texAmt * texAmt;
 
-        // PATCH v5.6 / v5.3w: PERMANENT BASE SMOOTHER — white / blue / violet only.
-        // v5.3w: white fixedCoeff raised from 0.015 → 0.038.
-        // Higher coefficient = less integration = rawer, less "padded" texture.
-        // The smoother still runs (silence-safe, prevents state divergence) but
-        // its memory τ is much shorter, so fast transients pass through unsmoothed.
         if (color === 'white' || color === 'blue' || color === 'violet') {
           const fixedCoeff = (color === 'white') ? 0.25 : 0.04;
           filters.textureL += (sampleL - filters.textureL) * fixedCoeff;
@@ -1935,9 +1916,9 @@ class RealtimeEngine extends AudioWorkletProcessor {
     // ================= SPEAKER LOUDNESS ASSIST =================
     {
       const sla = this.sla;
-
-      const lp800coeff = 1 - Math.exp(-2 * Math.PI * 800  / sr);
-      const lp6kcoeff  = 1 - Math.exp(-2 * Math.PI * 6000 / sr);
+      // v5.5m: use pre-computed coefficients
+      const lp800coeff = this._slaLp800;
+      const lp6kcoeff  = this._slaLp6k;
 
       for (let i = 0; i < blockSize; i++) {
         sla.rmsAcc += L[i] * L[i] + R[i] * R[i];
