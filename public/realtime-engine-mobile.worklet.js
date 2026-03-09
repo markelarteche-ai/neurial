@@ -432,45 +432,47 @@ class RealtimeEngineMobile extends AudioWorkletProcessor {
         }
       }
 
-      // ── 2. Biquad passes — 4 separate tight loops ─────────────────────────
-      for (let i=0; i<bs; i++) tmpL[i]=fL0.process(tmpL[i]);
-      for (let i=0; i<bs; i++) tmpL[i]=fL1.process(tmpL[i]);
-      for (let i=0; i<bs; i++) tmpR[i]=fR0.process(tmpR[i]);
-      for (let i=0; i<bs; i++) tmpR[i]=fR1.process(tmpR[i]);
-
-      // ── 3. Mix with SAMPLE-BY-SAMPLE gain smoothing ───────────────────────
-      // KEY: smI, smV, dr, ramp are all local vars advanced every sample.
-      // This means gain is a continuous curve across block boundaries —
-      // the last sample of block N and first sample of block N+1 are adjacent
-      // on the same exponential curve. No steps, no clicks.
+      // ── 2. Pre-scale with smoothed gain BEFORE biquads ───────────────────────
+      // Biquads must see a smoothly ramped signal. If we scale after filtering,
+      // the filter state loads at full amplitude on layer activation — click.
+      // Scaling before means filter state builds gradually with the signal.
       let smI  = this._smIntensity[ci];
       let smV  = this._smVolume[ci];
       let dr   = this._densityRamp[ci];
       let ramp = this._onRamp[ci];
-      // smMC comes from outer scope — continuous across all layers
 
       for (let i=0; i<bs; i++) {
         const tI = ipIsAR  ? ipArr[i]  : ipArr[0];
         const tV = volIsAR ? volArr[i] : volArr[0];
-
-        dr   += (tI            - dr)  * kD;
-        smI  += (dr            - smI) * kS;
-        smV  += (tV            - smV) * kS;
-        smMC += (targetMixComp - smMC) * kS;
-        ramp += (1             - ramp) * kR;
-
-        const g = smI * smV * BASE_GAIN * smMC * ramp;
-        const mid  = (tmpL[i]+tmpR[i]) * 0.5;
-        const side = (tmpL[i]-tmpR[i]) * 0.4;
-        L[i] += (mid+side) * g;
-        R[i] += (mid-side) * g;
+        dr   += (tI - dr)  * kD;
+        smI  += (dr - smI) * kS;
+        smV  += (tV - smV) * kS;
+        ramp += (1  - ramp) * kR;
+        const g = smI * smV * BASE_GAIN * ramp;
+        tmpL[i] *= g;
+        tmpR[i] *= g;
       }
 
       this._smIntensity[ci] = smI;
       this._smVolume[ci]    = smV;
       this._densityRamp[ci] = dr;
       this._onRamp[ci]      = ramp;
-      // smMC NOT written here — continues into next layer
+
+      // ── 3. Biquad passes — signal already gain-scaled ─────────────────────
+      for (let i=0; i<bs; i++) tmpL[i]=fL0.process(tmpL[i]);
+      for (let i=0; i<bs; i++) tmpL[i]=fL1.process(tmpL[i]);
+      for (let i=0; i<bs; i++) tmpR[i]=fR0.process(tmpR[i]);
+      for (let i=0; i<bs; i++) tmpR[i]=fR1.process(tmpR[i]);
+
+      // ── 4. Mix into output with M/S and smoothed mixComp ─────────────────
+      for (let i=0; i<bs; i++) {
+        smMC += (targetMixComp - smMC) * kS;
+        const mid  = (tmpL[i]+tmpR[i]) * 0.5;
+        const side = (tmpL[i]-tmpR[i]) * 0.4;
+        L[i] += (mid+side) * smMC;
+        R[i] += (mid-side) * smMC;
+      }
+      // smMC continues into next layer
     }
 
     // Persist smoothed mixComp for next block
