@@ -482,14 +482,8 @@ const TC = isMobileRef.current ? 0.2 : 0.05;
   if (!node || !ctx || ctx.state !== 'running') return;
   const param = node.parameters.get(name);
   if (!param) return;
-  if (isMobileRef.current) {
-    const now = ctx.currentTime;
-    param.cancelScheduledValues(now);
-    param.setValueAtTime(param.value, now);
-    param.linearRampToValueAtTime(value, now + 0.2);
-  } else {
-    param.setTargetAtTime(value, ctx.currentTime, 0.08);
-  }
+  const TC = isMobileRef.current ? 0.2 : 0.08;
+  param.setTargetAtTime(value, ctx.currentTime, TC);
 };
 
   const syncThrottleRef = useRef(null);
