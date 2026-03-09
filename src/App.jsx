@@ -779,7 +779,8 @@ workletLoadedRef.current = false;
     try {
       // Create context immediately inside user gesture (critical for iOS/Android)
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
-      const ctx = new AudioCtx({ latencyHint: 'interactive', sampleRate: 44100 });
+      const sr = isMobileRef.current ? 22050 : 44100;
+const ctx = new AudioCtx({ latencyHint: isMobileRef.current ? 'playback' : 'interactive', sampleRate: sr });
 
       // iOS requires resume() synchronously inside the gesture handler
       // We call it before any await to satisfy the user-gesture requirement
