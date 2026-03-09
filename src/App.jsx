@@ -424,7 +424,7 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
     const t = ctx.currentTime;
     // 0.05 timeConstant (~50ms) eliminates zipper noise on mobile
     // where audio buffers are larger and parameter jumps are more audible
-    const TC = 0.05;
+const TC = isMobileRef.current ? 0.2 : 0.05;
 
     Object.entries(layers).forEach(([k, c]) => {
       node.parameters.get(`${k}_intensity`)?.setTargetAtTime((c.intensity ?? 0) / 100, t, TC);
@@ -477,11 +477,20 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
 
   // Send a single param directly to worklet with smooth ramp - avoids zipper noise on mobile
   const sendParam = (name, value) => {
-    const node = mixerNodeRef.current;
-    const ctx = audioContextRef.current;
-    if (!node || !ctx || ctx.state !== 'running') return;
-    node.parameters.get(name)?.setTargetAtTime(value, ctx.currentTime, 0.15);
-  };
+  const node = mixerNodeRef.current;
+  const ctx = audioContextRef.current;
+  if (!node || !ctx || ctx.state !== 'running') return;
+  const param = node.parameters.get(name);
+  if (!param) return;
+  if (isMobileRef.current) {
+    const now = ctx.currentTime;
+    param.cancelScheduledValues(now);
+    param.setValueAtTime(param.value, now);
+    param.linearRampToValueAtTime(value, now + 0.2);
+  } else {
+    param.setTargetAtTime(value, ctx.currentTime, 0.08);
+  }
+};
 
   const syncThrottleRef = useRef(null);
 useEffect(() => {
@@ -491,11 +500,11 @@ useEffect(() => {
     // Throttle to max once every 30ms to avoid zipper noise from rapid slider moves on mobile
     if (syncThrottleRef.current) clearTimeout(syncThrottleRef.current);
     syncThrottleRef.current = setTimeout(() => {
-      syncAllRealtimeParams(ctx);
-      const f = ensureStableChain(ctx);
-      const t = ctx.currentTime;
-      f.bass.gain.setTargetAtTime((processing.bass-50)/5, t, 0.05);
-    }, 50);
+  syncAllRealtimeParams(ctx);
+  const f = ensureStableChain(ctx);
+  const t = ctx.currentTime;
+  f.bass.gain.setTargetAtTime((processing.bass-50)/5, t, isMobileRef.current ? 0.2 : 0.05);
+}, isMobileRef.current ? 100 : 50);
   }, [layers, brainwaves, processing, isPlaying]);
 
   useEffect(() => {
@@ -743,6 +752,7 @@ useEffect(() => {
 
   const lastPlayTimestamp = useRef(0);
   const workletLoadedRef = useRef(false);
+  const isMobileRef = useRef(/Android|iPhone|iPad|Mobile|HarmonyOS/i.test(navigator.userAgent));
 
   const play = async () => {
     const now = Date.now();
