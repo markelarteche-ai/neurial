@@ -483,6 +483,11 @@ const TC = isMobileRef.current ? 0.2 : 0.05;
   const param = node.parameters.get(name);
   if (!param) return;
   const TC = isMobileRef.current ? 0.2 : 0.08;
+  try {
+    param.cancelAndHoldAtTime(ctx.currentTime);
+  } catch(e) {
+    param.cancelScheduledValues(ctx.currentTime);
+  }
   param.setTargetAtTime(value, ctx.currentTime, TC);
 };
 
