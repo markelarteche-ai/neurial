@@ -521,9 +521,11 @@ class RealtimeEngineMobile extends AudioWorkletProcessor {
 
     // ── Soft limiter ──────────────────────────────────────────────────
     for (let i = 0; i < blockSize; i++) {
-      if (L[i] !== 0) L[i] = Math.tanh(L[i] * 0.85) * 0.98;
-      if (R[i] !== 0) R[i] = Math.tanh(R[i] * 0.85) * 0.98;
-    }
+  const absL = L[i] < 0 ? -L[i] : L[i];
+  const absR = R[i] < 0 ? -R[i] : R[i];
+  if (absL > 0.7) L[i] = Math.tanh(L[i] * 0.85) * 0.98;
+  if (absR > 0.7) R[i] = Math.tanh(R[i] * 0.85) * 0.98;
+}
 
     // ── Final floor clamp ─────────────────────────────────────────────
     for (let i = 0; i < blockSize; i++) {
