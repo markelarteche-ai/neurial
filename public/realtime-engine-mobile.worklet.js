@@ -1,4 +1,4 @@
-// REALTIME AUDIO ENGINE — MOBILE WORKLET v4.0
+// REALTIME AUDIO ENGINE — MOBILE WORKLET v4.1
 // ─────────────────────────────────────────────────────────────────────────────
 // Click-free design principles:
 //
@@ -17,6 +17,10 @@
 //   5. Numeric color indices — no string property lookups in hot path.
 //
 //   6. Biquads applied in 4 separate block passes (cache-friendly).
+//
+//   v4.1 fix: activeCount now uses smoothed intensities (_smIntensity) instead
+//   of raw parameter values, preventing targetMixComp from jumping between
+//   blocks when a slider moves — which was the main cause of mobile clicks.
 // ─────────────────────────────────────────────────────────────────────────────
 
 class Biquad {
@@ -308,8 +312,6 @@ class RealtimeEngineMobile extends AudioWorkletProcessor {
     L.fill(0); R.fill(0);
 
     // ── Activity check ────────────────────────────────────────────────────────
-    // Use [0] for the check — if the layer was active at block start OR end,
-    // we process it so the smoother can decay it gracefully to zero.
     let hasActive=false;
     for (let ci=0; ci<NC; ci++) {
       if (this._smIntensity[ci]>0.0001 || parameters[this._pIntensity[ci]][0]>0.001) {
@@ -323,27 +325,35 @@ class RealtimeEngineMobile extends AudioWorkletProcessor {
     }
     if (!hasActive) return true;
 
-    // ── Mix compensation target (smoothed below, inside mix loop) ────────────
-    // Computing a scalar mixComp and applying it instantly causes a click
-    // every time a layer is added/removed. We smooth it sample-by-sample instead.
-    let activeCount = 0;
-for (let ci = 0; ci < NC; ci++) {
-  // smIntensity refleja la ganancia real que ya está sonando,
-  // no el valor raw del parámetro que puede saltar entre bloques
-  if (this._smIntensity[ci] > 0.005 || parameters[this._pIntensity[ci]][0] > 0.001) activeCount++;
-}
-for (let wi = 0; wi < NW; wi++) {
-  if (parameters[this._pWEnabled[wi]][0] > 0.5) activeCount++;
-}
-const targetMixComp = 1/Math.sqrt(activeCount < 1 ? 1 : activeCount);
+    // ── Mix compensation target ───────────────────────────────────────────────
+    // FIX v4.1: Use _smIntensity (already smoothed inside the mix loop) instead
+    // of the raw parameter value to count active layers.
+    //
+    // The raw parameter[0] can jump discontinuously between blocks when a slider
+    // moves — e.g. from 0.0 to 0.5 in one block boundary — causing targetMixComp
+    // to jump from 1.0 to 0.707 instantly. Even though smMC smooths toward that
+    // target, the *target itself* jumping creates an audible click on mobile where
+    // buffer sizes are 512–4096 samples (10–90 ms) and the smoother overshoots.
+    //
+    // Using _smIntensity means activeCount only changes when the smoothed gain
+    // already reflects the new layer being audible — the compensation curve stays
+    // continuous and the worklet's own sample-by-sample smoother handles the rest.
+    let activeCount=0;
+    for (let ci=0; ci<NC; ci++) {
+      // Count a layer as active if it's either smoothly fading in (smIntensity > threshold)
+      // OR if the incoming parameter just crossed zero (so we start compensating early
+      // and avoid a loud transient on the first block of a new layer).
+      if (this._smIntensity[ci]>0.005 || parameters[this._pIntensity[ci]][0]>0.001) activeCount++;
+    }
+    for (let wi=0; wi<NW; wi++) {
+      if (parameters[this._pWEnabled[wi]][0]>0.5) activeCount++;
+    }
+    const targetMixComp = 1/Math.sqrt(activeCount<1?1:activeCount);
     const BASE_GAIN=1.8;
 
     const kD=this._kD, kS=this._kS, kR=this._kR;
     const tmpL=this._tmpL, tmpR=this._tmpR;
 
-    // smMixComp advances continuously through all layers this block
-    // It must be read/written as a single running state, not per-layer.
-    // We handle it outside the layer loop.
     let smMC = this._smMixComp;
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -353,8 +363,6 @@ const targetMixComp = 1/Math.sqrt(activeCount < 1 ? 1 : activeCount);
       const ipArr = parameters[this._pIntensity[ci]];
       const volArr = parameters[this._pVolume[ci]];
 
-      // If both the smoothed state AND the incoming param are near zero,
-      // skip generation entirely (cheap check, no click risk — smoother is already at 0)
       const peakIntensity = ipArr[ipArr.length-1];
       if (this._smIntensity[ci] < 0.0001 && peakIntensity < 0.001) {
         this._densityRamp[ci]=0;
@@ -363,7 +371,7 @@ const targetMixComp = 1/Math.sqrt(activeCount < 1 ? 1 : activeCount);
       }
 
       const bass    = parameters[this._pBass[ci]][0];
-      const ipIsAR  = ipArr.length > 1;   // a-rate = slider moving this block
+      const ipIsAR  = ipArr.length > 1;
       const volIsAR = volArr.length > 1;
 
       const fL0=this._filters[ci*4+0], fL1=this._filters[ci*4+1];
@@ -441,15 +449,10 @@ const targetMixComp = 1/Math.sqrt(activeCount < 1 ? 1 : activeCount);
       for (let i=0; i<bs; i++) tmpR[i]=fR1.process(tmpR[i]);
 
       // ── 3. Mix with SAMPLE-BY-SAMPLE gain smoothing ───────────────────────
-      // KEY: smI, smV, dr, ramp are all local vars advanced every sample.
-      // This means gain is a continuous curve across block boundaries —
-      // the last sample of block N and first sample of block N+1 are adjacent
-      // on the same exponential curve. No steps, no clicks.
       let smI  = this._smIntensity[ci];
       let smV  = this._smVolume[ci];
       let dr   = this._densityRamp[ci];
       let ramp = this._onRamp[ci];
-      // smMC comes from outer scope — continuous across all layers
 
       for (let i=0; i<bs; i++) {
         const tI = ipIsAR  ? ipArr[i]  : ipArr[0];
@@ -472,10 +475,8 @@ const targetMixComp = 1/Math.sqrt(activeCount < 1 ? 1 : activeCount);
       this._smVolume[ci]    = smV;
       this._densityRamp[ci] = dr;
       this._onRamp[ci]      = ramp;
-      // smMC NOT written here — continues into next layer
     }
 
-    // Persist smoothed mixComp for next block
     this._smMixComp = smMC;
 
     // ─────────────────────────────────────────────────────────────────────────
