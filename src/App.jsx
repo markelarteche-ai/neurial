@@ -386,12 +386,6 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
 
   const natureSoundsRef = useRef(natureSounds);
   useEffect(() => { natureSoundsRef.current = natureSounds; }, [natureSounds]);
-  const layersRef     = useRef(layers);
-const brainwavesRef = useRef(brainwaves);
-const processingRef = useRef(processing);
-useEffect(() => { layersRef.current = layers; },         [layers]);
-useEffect(() => { brainwavesRef.current = brainwaves; }, [brainwaves]);
-useEffect(() => { processingRef.current = processing; }, [processing]);
 
   const isPlayingRef = useRef(false);
   useEffect(() => { isPlayingRef.current = isPlaying; }, [isPlaying]);
@@ -425,6 +419,9 @@ useEffect(() => { processingRef.current = processing; }, [processing]);
   );
 
   const isMobileRef = useRef(/Android|iPhone|iPad|Mobile|HarmonyOS/i.test(navigator.userAgent));
+  const sliderTimers = useRef({});
+  const sliderActiveRef = useRef(false);
+const sliderActiveTimerRef = useRef(null);
 
   // ─────────────────────────────────────────────────────────────────────────
   // SEND PARAM — CLICK-FREE SLIDER UPDATE
@@ -452,23 +449,39 @@ useEffect(() => { processingRef.current = processing; }, [processing]);
   // Web Audio param ramp to not outpace them — if the param ramp is faster
   // than the worklet smoother, the worklet clamps it and you get zipper noise.
   const sendParam = (name, value) => {
-    const node = mixerNodeRef.current;
-    const ctx = audioContextRef.current;
-    if (!node || !ctx || ctx.state !== 'running') return;
-    const param = node.parameters.get(name);
-    if (!param) return;
-    const t = ctx.currentTime;
-    const TC = isMobileRef.current ? 0.25 : 0.08;
-    try {
-      // cancelAndHoldAtTime: W3C spec, supported in Chrome 57+, Safari 14.1+, Firefox 89+
-      // On mobile this is the critical call — it prevents stacked ramp discontinuities
-      param.cancelAndHoldAtTime(t);
-    } catch {
-      // Fallback for older WebKit (iOS < 14.1): cancel all and hold at current computed value
-      param.cancelScheduledValues(t);
-      param.setValueAtTime(param.value, t);
+    if (isMobileRef.current) {
+      clearTimeout(sliderTimers.current[name]);
+      sliderTimers.current[name] = setTimeout(() => {
+        const node = mixerNodeRef.current;
+        const ctx = audioContextRef.current;
+        if (!node || !ctx || ctx.state !== 'running') return;
+        const param = node.parameters.get(name);
+        if (!param) return;
+        const t = ctx.currentTime;
+        try {
+          param.cancelAndHoldAtTime(t);
+        } catch {
+          param.cancelScheduledValues(t);
+          param.setValueAtTime(param.value, t);
+        }
+        param.setTargetAtTime(value, t, 0.08);
+      }, 32);
+    } else {
+      const node = mixerNodeRef.current;
+      const ctx = audioContextRef.current;
+      if (!node || !ctx || ctx.state !== 'running') return;
+      const param = node.parameters.get(name);
+      if (!param) return;
+      const t = ctx.currentTime;
+      const TC = 0.08;
+      try {
+        param.cancelAndHoldAtTime(t);
+      } catch {
+        param.cancelScheduledValues(t);
+        param.setValueAtTime(param.value, t);
+      }
+      param.setTargetAtTime(value, t, TC);
     }
-    param.setTargetAtTime(value, t, TC);
   };
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -498,34 +511,30 @@ useEffect(() => { processingRef.current = processing; }, [processing]);
       param.setTargetAtTime(value, t, TC);
     };
 
-    const L = layersRef.current;
-    const B = brainwavesRef.current;
-    const P = processingRef.current;
-
-    Object.entries(L).forEach(([k, c]) => {
+    Object.entries(layers).forEach(([k, c]) => {
       rampParam(`${k}_intensity`, (c.intensity ?? 0) / 100);
       rampParam(`${k}_volume`,    (c.volume ?? 100) / 100);
       rampParam(`${k}_bass`,      (c.bass ?? 50) / 100);
       rampParam(`${k}_texture`,   (c.texture ?? 50) / 100);
     });
 
-    Object.entries(B).forEach(([k, c]) => {
+    Object.entries(brainwaves).forEach(([k, c]) => {
       rampParam(`${k}_enabled`,   c.enabled ? 1 : 0);
       rampParam(`${k}_carrier`,   c.carrier ?? 200);
       rampParam(`${k}_beat`,      c.beat ?? 10);
       rampParam(`${k}_intensity`, (c.intensity ?? 50) / 100);
     });
 
-    rampParam('stereoDecorr',   (P.stereoDecorr ?? 0) / 100);
-    rampParam('stereoWidth',    (P.stereoWidth ?? 100) / 50);
-    rampParam('harmonicSat',    (P.harmonicSat ?? 0) / 100);
-    rampParam('spectralDrift',  (P.spectralDrift ?? 0) / 100);
-    rampParam('temporalSmooth', (P.temporalSmooth ?? 0) / 100);
-    rampParam('layerInteract',  (P.layerInteract ?? 0) / 100);
-    rampParam('microRandom',    (P.microRandom ?? 0) / 100);
-    rampParam('treble',         (P.treble ?? 55) / 100);
-    rampParam('mid',            (P.mid ?? 55) / 100);
-    rampParam('pressure',       (P.pressure ?? 50) / 100);
+    rampParam('stereoDecorr',   (processing.stereoDecorr ?? 0) / 100);
+    rampParam('stereoWidth',    (processing.stereoWidth ?? 100) / 50);
+    rampParam('harmonicSat',    (processing.harmonicSat ?? 0) / 100);
+    rampParam('spectralDrift',  (processing.spectralDrift ?? 0) / 100);
+    rampParam('temporalSmooth', (processing.temporalSmooth ?? 0) / 100);
+    rampParam('layerInteract',  (processing.layerInteract ?? 0) / 100);
+    rampParam('microRandom',    (processing.microRandom ?? 0) / 100);
+    rampParam('treble',         (processing.treble ?? 55) / 100);
+    rampParam('mid',            (processing.mid ?? 55) / 100);
+    rampParam('pressure',       (processing.pressure ?? 50) / 100);
     rampParam('master',         1);
   };
 
@@ -564,15 +573,14 @@ useEffect(() => { processingRef.current = processing; }, [processing]);
   const syncThrottleRef = useRef(null);
   useEffect(() => {
     if (!isPlaying) return;
-    const ctx = audioContextRef.current;
-    if (!ctx) return;
     if (syncThrottleRef.current) clearTimeout(syncThrottleRef.current);
     syncThrottleRef.current = setTimeout(() => {
+      if (sliderActiveRef.current) return;
       const currentCtx = audioContextRef.current;
-if (!currentCtx || currentCtx.state !== 'running') return;
-syncAllRealtimeParams(currentCtx);
-const f = ensureStableChain(currentCtx);
-const t = currentCtx.currentTime;
+      if (!currentCtx || currentCtx.state !== 'running') return;
+      syncAllRealtimeParams(currentCtx);
+      const f = ensureStableChain(currentCtx);
+      const t = currentCtx.currentTime;
       const TC = isMobileRef.current ? 0.25 : 0.05;
       const bassParam = f.bass.gain;
       try {
@@ -904,12 +912,10 @@ const t = currentCtx.currentTime;
             const p = node.parameters.get(name);
             if (!p) return;
             if (TC === 0) {
-              p.setValueAtTime(val, t);
-            } else {
-              // Don't cancel here — worklet just started, no prior automation
-              p.setValueAtTime(0, t);
-              p.setTargetAtTime(val, t, TC);
-            }
+  p.setValueAtTime(val, t);
+} else {
+  p.setTargetAtTime(val, t, TC);
+}
           };
           setP(`${k}_intensity`, (c.intensity ?? 0) / 100);
           setP(`${k}_volume`,    (c.volume ?? 100) / 100);
@@ -988,7 +994,7 @@ const t = currentCtx.currentTime;
     isPlayingRef.current = false;
     setIsTransitioning(true);
 
-    const fadeTime = 0.1;
+    const fadeTime = 0.3;
     const now = ctx.currentTime;
     try {
       gain.gain.cancelScheduledValues(now);
@@ -1653,7 +1659,6 @@ const t = currentCtx.currentTime;
       <style>{`
         *, *::before, *::after { box-sizing: border-box !important; }
         html, body, #root { margin: 0 !important; padding: 0 !important; width: 100% !important; }
-        button { -webkit-user-drag: none; }
         @keyframes neurialWaveMotion {
           0%, 100% { transform: translateY(0px); }
           50% { transform: translateY(-2px); }
@@ -1760,31 +1765,23 @@ const t = currentCtx.currentTime;
           {/* PRESETS SECTION */}
           <div style={{ padding: '24px 32px', borderBottom: '1px solid rgba(250,204,21,0.1)' }}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', isolation: 'isolate' }}>
-  {['DeepSleep', 'DeepSpace', 'CalmMind', 'MentalReset', 'DeepFocus', 'TinnitusMasking', 'ADHDSupport', 'MeditationFlow'].map(p => (
-    <button
-      key={p}
-      onClick={() => { if (isTransitioning) return; applyPreset(p); }}
-      style={activePreset === p ? {
-        touchAction: 'manipulation',
-        userSelect: 'none',
-        WebkitUserDrag: 'none',
-        WebkitTapHighlightColor: 'transparent',
-        padding: '12px 16px', borderRadius: '8px', fontSize: '14px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.3s',
-        background: 'linear-gradient(to right,#facc15,#fde047)', color: '#000', border: '2px solid #eab308',
-        boxShadow: '0 4px 6px rgba(250,204,21,0.5)', outline: '2px solid rgba(250,204,21,0.5)', outlineOffset: '2px'
-      } : {
-        touchAction: 'manipulation',
-        userSelect: 'none',
-        WebkitUserDrag: 'none',
-        WebkitTapHighlightColor: 'transparent',
-        padding: '12px 16px', borderRadius: '8px', fontSize: '14px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.3s',
-        background: 'linear-gradient(to right,#1e293b,#0f172a)', color: '#fff', border: '2px solid rgba(250,204,21,0.3)'
-      }}
-    >
-      {p.replace(/([A-Z])/g, ' $1').trim()}
-    </button>
-  ))}
-</div>
+              {['DeepSleep', 'DeepSpace', 'CalmMind', 'MentalReset', 'DeepFocus', 'TinnitusMasking', 'ADHDSupport', 'MeditationFlow'].map(p => (
+                <button
+                  key={p}
+                  onClick={() => { if (isTransitioning) return; applyPreset(p); }}
+                  style={activePreset === p ? {
+                    padding: '12px 16px', borderRadius: '8px', fontSize: '14px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.3s',
+                    background: 'linear-gradient(to right,#facc15,#fde047)', color: '#000', border: '2px solid #eab308',
+                    boxShadow: '0 4px 6px rgba(250,204,21,0.5)', outline: '2px solid rgba(250,204,21,0.5)', outlineOffset: '2px'
+                  } : {
+                    padding: '12px 16px', borderRadius: '8px', fontSize: '14px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.3s',
+                    background: 'linear-gradient(to right,#1e293b,#0f172a)', color: '#fff', border: '2px solid rgba(250,204,21,0.3)'
+                  }}
+                >
+                  {p.replace(/([A-Z])/g, ' $1').trim()}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* TABS */}
@@ -1827,10 +1824,13 @@ const t = currentCtx.currentTime;
                           <label style={{ display: 'block', fontSize: '12px', marginBottom: '8px', color: 'rgba(254,240,138,0.7)' }}>Intensity: <span {...NT}>{c.intensity}%</span></label>
                           <input type="range" min="0" max="100" value={c.intensity}
                             onChange={(e) => {
-                              const v = parseInt(e.target.value);
-                              setLayers(pr => ({ ...pr, [t]: { ...pr[t], intensity: v } }));
-                              sendParam(`${t}_intensity`, v / 100);
-                            }}
+  const v = parseInt(e.target.value);
+  setLayers(pr => ({ ...pr, [t]: { ...pr[t], intensity: v } }));
+  sliderActiveRef.current = true;
+  clearTimeout(sliderActiveTimerRef.current);
+  sliderActiveTimerRef.current = setTimeout(() => { sliderActiveRef.current = false; }, 300);
+  sendParam(`${t}_intensity`, v / 100);
+}}
                           />
                         </div>
                         {c.intensity > 0 && (
@@ -1839,111 +1839,138 @@ const t = currentCtx.currentTime;
                               <label style={{ display: 'block', fontSize: '12px', marginBottom: '8px', color: 'rgba(254,240,138,0.7)' }}>Volume: <span {...NT}>{c.volume}%</span></label>
                               <input type="range" min="0" max="100" value={c.volume}
                                 onChange={(e) => {
-                                  const v = parseInt(e.target.value);
-                                  setLayers(pr => ({ ...pr, [t]: { ...pr[t], volume: v } }));
-                                  sendParam(`${t}_volume`, v / 100);
-                                }}
+  const v = parseInt(e.target.value);
+  setLayers(pr => ({ ...pr, [t]: { ...pr[t], volume: v } }));
+  sliderActiveRef.current = true;
+  clearTimeout(sliderActiveTimerRef.current);
+  sliderActiveTimerRef.current = setTimeout(() => { sliderActiveRef.current = false; }, 300);
+  sendParam(`${t}_volume`, v / 100);
+}}
                               />
                             </div>
                             <div style={{ paddingBottom: '4px' }}>
                               <label style={{ display: 'block', fontSize: '12px', marginBottom: '8px', color: 'rgba(254,240,138,0.7)' }}>Texture: <span {...NT}>{c.texture}%</span></label>
                               <input type="range" min="0" max="100" value={c.texture}
                                 onChange={(e) => {
-                                  const v = parseInt(e.target.value);
-                                  setLayers(pr => ({ ...pr, [t]: { ...pr[t], texture: v } }));
-                                  sendParam(`${t}_texture`, v / 100);
-                                }}
-                              />
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+  const v = parseInt(e.target.value);
+  setLayers(pr => ({ ...pr, [t]: { ...pr[t], texture: v } }));
+  sliderActiveRef.current = true;
+  clearTimeout(sliderActiveTimerRef.current);
+  sliderActiveTimerRef.current = setTimeout(() => { sliderActiveRef.current = false; }, 300);
+  sendParam(`${t}_texture`, v / 100);
+}}
+/>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  ))}
+</div>
+)}
 
-              {/* ===== NATURE TAB ===== */}
-              {activeTab === 'nature' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                  <div style={{ borderRadius: '8px', padding: '16px', marginBottom: '16px', background: 'linear-gradient(90deg,rgba(250,204,21,0.1),rgba(253,224,71,0.1))', border: '2px solid rgba(250,204,21,0.3)' }}>
-                    <p style={{ color: '#fef08a', fontSize: '12px', margin: 0 }}>🌿 <strong>Nature Sounds:</strong> Add realistic nature ambience to your mix. These are your own high-quality recordings that loop seamlessly. &nbsp;·&nbsp; 🎧 Headphones bring every detail to life</p>
-                  </div>
-                  {['rain', 'storm', 'ocean', 'wind', 'fire', 'waterfall', 'river', 'nightforest', 'nightingale'].map((soundKey) => {
-                    const soundConfig = natureSounds[soundKey];
-                    const soundNames = {
-                      rain: { name: '🌧️ Rain', desc: 'Gentle rain sounds' },
-                      storm: { name: '⛈️ Thunderstorm', desc: 'Intense thunderstorm' },
-                      ocean: { name: '🌊 Ocean Waves', desc: 'Calm ocean waves with birds' },
-                      wind: { name: '💨 Wind', desc: 'Soft wind breeze' },
-                      fire: { name: '🔥 Campfire', desc: 'Crackling fire sounds' },
-                      waterfall: { name: '💧 Waterfall', desc: 'Flowing waterfall' },
-                      river: { name: '🏞️ River in Forest', desc: 'River flowing through forest' },
-                      nightforest: { name: '🌙 Night Forest', desc: 'Forest at night with insects' },
-                      nightingale: { name: '🐦 Nightingale', desc: 'Pure nightingale song in forest' }
-                    };
-                    const info = soundNames[soundKey];
-                    return (
-                      <div key={soundKey} style={{ padding: '16px', borderRadius: '8px', transition: 'all 0.3s', background: 'rgba(30,41,59,0.5)', border: '2px solid rgba(250,204,21,0.2)', overflow: 'visible', textAlign: 'left' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                          <div>
-                            <h4 style={{ color: '#fef08a', fontWeight: 500, fontSize: '14px', margin: '0 0 2px 0' }}>{info.name}</h4>
-                            <p style={{ fontSize: '12px', color: 'rgba(254,240,138,0.6)', margin: 0 }}>{info.desc}</p>
-                          </div>
-                          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                            <input type="checkbox" checked={soundConfig.enabled} onChange={(e) => handleNatureToggle(soundKey, e.target.checked)} />
-                            <span style={{ fontSize: '12px', color: 'rgba(254,240,138,0.7)' }}>Enable</span>
-                          </label>
-                        </div>
-                        {soundConfig.enabled && (
-                          <div style={{ marginTop: '12px', paddingBottom: '4px' }}>
-                            <label style={{ display: 'block', fontSize: '12px', marginBottom: '4px', color: 'rgba(254,240,138,0.7)' }}>Volume: <span {...NT}>{soundConfig.volume}%</span></label>
-                            <input type="range" min="0" max="100" value={soundConfig.volume}
-                              onChange={(e) => setNatureSounds(prev => ({ ...prev, [soundKey]: { ...prev[soundKey], volume: parseInt(e.target.value) } }))}
-                            />
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+{/* ===== NATURE TAB ===== */}
+{activeTab === 'nature' && (
+  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+    <div style={{ borderRadius: '8px', padding: '16px', marginBottom: '16px', background: 'linear-gradient(90deg,rgba(250,204,21,0.1),rgba(253,224,71,0.1))', border: '2px solid rgba(250,204,21,0.3)' }}>
+      <p style={{ color: '#fef08a', fontSize: '12px', margin: 0 }}>🌿 <strong>Nature Sounds:</strong> Add realistic nature ambience to your mix. These are your own high-quality recordings that loop seamlessly. &nbsp;·&nbsp; 🎧 Headphones bring every detail to life</p>
+    </div>
+    {['rain', 'storm', 'ocean', 'wind', 'fire', 'waterfall', 'river', 'nightforest', 'nightingale'].map((soundKey) => {
+      const soundConfig = natureSounds[soundKey];
+      const soundNames = {
+        rain: { name: '🌧️ Rain', desc: 'Gentle rain sounds' },
+        storm: { name: '⛈️ Thunderstorm', desc: 'Intense thunderstorm' },
+        ocean: { name: '🌊 Ocean Waves', desc: 'Calm ocean waves with birds' },
+        wind: { name: '💨 Wind', desc: 'Soft wind breeze' },
+        fire: { name: '🔥 Campfire', desc: 'Crackling fire sounds' },
+        waterfall: { name: '💧 Waterfall', desc: 'Flowing waterfall' },
+        river: { name: '🏞️ River in Forest', desc: 'River flowing through forest' },
+        nightforest: { name: '🌙 Night Forest', desc: 'Forest at night with insects' },
+        nightingale: { name: '🐦 Nightingale', desc: 'Pure nightingale song in forest' }
+      };
+      const info = soundNames[soundKey];
+      return (
+        <div key={soundKey} style={{ padding: '16px', borderRadius: '8px', transition: 'all 0.3s', background: 'rgba(30,41,59,0.5)', border: '2px solid rgba(250,204,21,0.2)', overflow: 'visible', textAlign: 'left' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+            <div>
+              <h4 style={{ color: '#fef08a', fontWeight: 500, fontSize: '14px', margin: '0 0 2px 0' }}>{info.name}</h4>
+              <p style={{ fontSize: '12px', color: 'rgba(254,240,138,0.6)', margin: 0 }}>{info.desc}</p>
+            </div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+              <input type="checkbox" checked={soundConfig.enabled} onChange={(e) => handleNatureToggle(soundKey, e.target.checked)} />
+              <span style={{ fontSize: '12px', color: 'rgba(254,240,138,0.7)' }}>Enable</span>
+            </label>
+          </div>
+          {soundConfig.enabled && (
+            <div style={{ marginTop: '12px', paddingBottom: '4px' }}>
+              <label style={{ display: 'block', fontSize: '12px', marginBottom: '4px', color: 'rgba(254,240,138,0.7)' }}>Volume: <span {...NT}>{soundConfig.volume}%</span></label>
+              <input type="range" min="0" max="100" value={soundConfig.volume}
+                onChange={(e) => setNatureSounds(prev => ({ ...prev, [soundKey]: { ...prev[soundKey], volume: parseInt(e.target.value) } }))}
+              />
+            </div>
+          )}
+        </div>
+      );
+    })}
+  </div>
+)}
 
-              {/* ===== BRAINWAVES TAB ===== */}
-              {activeTab === 'brainwaves' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                  <div style={{ borderRadius: '8px', padding: '16px', marginBottom: '16px', background: 'linear-gradient(90deg,rgba(250,204,21,0.1),rgba(253,224,71,0.1))', border: '2px solid rgba(250,204,21,0.3)' }}>
-                    <p style={{ color: '#fef08a', fontSize: '12px', margin: 0 }}>🧠 <strong>Brainwave Entrainment:</strong> Binaural beats that guide your brain into specific states. Each frequency targets different mental states for optimal results. &nbsp;·&nbsp; 🎧 Headphones enhance the binaural effect</p>
-                  </div>
-                  {Object.entries(brainwaves).map(([t, c]) => (
-                    <div key={t} style={{ padding: '16px', borderRadius: '8px', transition: 'all 0.3s', background: 'rgba(30,41,59,0.5)', border: '2px solid rgba(250,204,21,0.2)', overflow: 'visible', textAlign: 'left' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                        <label style={{ color: '#fef08a', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', cursor: 'pointer', textTransform: 'capitalize' }}>
-                          <input type="checkbox" checked={c.enabled} onChange={(e) => setBrainwaves(pr => ({ ...pr, [t]: { ...pr[t], enabled: e.target.checked } }))} />
-                          {t} Wave
-                        </label>
-                      </div>
-                      <p style={{ fontSize: '12px', marginBottom: '12px', color: 'rgba(254,240,138,0.6)', margin: '0 0 12px 0' }}>{getBrainDesc(t)}</p>
-                      {c.enabled && (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                          <div style={{ paddingBottom: '4px' }}>
-                            <label style={{ display: 'block', fontSize: '12px', marginBottom: '8px', color: 'rgba(254,240,138,0.7)' }}>Carrier Frequency: <span {...NT}>{c.carrier} Hz</span></label>
-                            <input type="range" min="100" max="400" value={c.carrier}
-                              onChange={(e) => { const v = parseInt(e.target.value); setBrainwaves(pr => ({ ...pr, [t]: { ...pr[t], carrier: v } })); sendParam(`${t}_carrier`, v); }}
-                            />
-                          </div>
-                          <div style={{ paddingBottom: '4px' }}>
-                            <label style={{ display: 'block', fontSize: '12px', marginBottom: '8px', color: 'rgba(254,240,138,0.7)' }}>Beat Frequency: <span {...NT}>{c.beat} Hz</span></label>
-                            <input type="range" min="1" max="40" value={c.beat}
-                              onChange={(e) => { const v = parseInt(e.target.value); setBrainwaves(pr => ({ ...pr, [t]: { ...pr[t], beat: v } })); sendParam(`${t}_beat`, v); }}
-                            />
-                          </div>
-                          <div style={{ paddingBottom: '4px' }}>
-                            <label style={{ display: 'block', fontSize: '12px', marginBottom: '8px', color: 'rgba(254,240,138,0.7)' }}>Wave Intensity: <span {...NT}>{c.intensity}%</span></label>
-                            <input type="range" min="0" max="100" value={c.intensity}
-                              onChange={(e) => { const v = parseInt(e.target.value); setBrainwaves(pr => ({ ...pr, [t]: { ...pr[t], intensity: v } })); sendParam(`${t}_intensity`, v / 100); }}
-                            />
-                          </div>
+{/* ===== BRAINWAVES TAB ===== */}
+{activeTab === 'brainwaves' && (
+  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+    <div style={{ borderRadius: '8px', padding: '16px', marginBottom: '16px', background: 'linear-gradient(90deg,rgba(250,204,21,0.1),rgba(253,224,71,0.1))', border: '2px solid rgba(250,204,21,0.3)' }}>
+      <p style={{ color: '#fef08a', fontSize: '12px', margin: 0 }}>🧠 <strong>Brainwave Entrainment:</strong> Binaural beats that guide your brain into specific states. Each frequency targets different mental states for optimal results. &nbsp;·&nbsp; 🎧 Headphones enhance the binaural effect</p>
+    </div>
+    {Object.entries(brainwaves).map(([t, c]) => (
+      <div key={t} style={{ padding: '16px', borderRadius: '8px', transition: 'all 0.3s', background: 'rgba(30,41,59,0.5)', border: '2px solid rgba(250,204,21,0.2)', overflow: 'visible', textAlign: 'left' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+          <label style={{ color: '#fef08a', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', cursor: 'pointer', textTransform: 'capitalize' }}>
+            <input type="checkbox" checked={c.enabled} onChange={(e) => setBrainwaves(pr => ({ ...pr, [t]: { ...pr[t], enabled: e.target.checked } }))} />
+            {t} Wave
+          </label>
+        </div>
+        <p style={{ fontSize: '12px', marginBottom: '12px', color: 'rgba(254,240,138,0.6)', margin: '0 0 12px 0' }}>{getBrainDesc(t)}</p>
+        {c.enabled && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div style={{ paddingBottom: '4px' }}>
+              <label style={{ display: 'block', fontSize: '12px', marginBottom: '8px', color: 'rgba(254,240,138,0.7)' }}>Carrier Frequency: <span {...NT}>{c.carrier} Hz</span></label>
+              <input type="range" min="100" max="400" value={c.carrier}
+                onChange={(e) => {
+                  const v = parseInt(e.target.value);
+                  setBrainwaves(pr => ({ ...pr, [t]: { ...pr[t], carrier: v } }));
+                  sliderActiveRef.current = true;
+                  clearTimeout(sliderActiveTimerRef.current);
+                  sliderActiveTimerRef.current = setTimeout(() => { sliderActiveRef.current = false; }, 300);
+                  sendParam(`${t}_carrier`, v);
+                }}
+              />
+            </div>
+            <div style={{ paddingBottom: '4px' }}>
+              <label style={{ display: 'block', fontSize: '12px', marginBottom: '8px', color: 'rgba(254,240,138,0.7)' }}>Beat Frequency: <span {...NT}>{c.beat} Hz</span></label>
+              <input type="range" min="1" max="40" value={c.beat}
+                onChange={(e) => {
+                  const v = parseInt(e.target.value);
+                  setBrainwaves(pr => ({ ...pr, [t]: { ...pr[t], beat: v } }));
+                  sliderActiveRef.current = true;
+                  clearTimeout(sliderActiveTimerRef.current);
+                  sliderActiveTimerRef.current = setTimeout(() => { sliderActiveRef.current = false; }, 300);
+                  sendParam(`${t}_beat`, v);
+                }}
+              />
+            </div>
+            <div style={{ paddingBottom: '4px' }}>
+              <label style={{ display: 'block', fontSize: '12px', marginBottom: '8px', color: 'rgba(254,240,138,0.7)' }}>Wave Intensity: <span {...NT}>{c.intensity}%</span></label>
+              <input type="range" min="0" max="100" value={c.intensity}
+                onChange={(e) => {
+                  const v = parseInt(e.target.value);
+                  setBrainwaves(pr => ({ ...pr, [t]: { ...pr[t], intensity: v } }));
+                  sliderActiveRef.current = true;
+                  clearTimeout(sliderActiveTimerRef.current);
+                  sliderActiveTimerRef.current = setTimeout(() => { sliderActiveRef.current = false; }, 300);
+                  sendParam(`${t}_intensity`, v / 100);
+                }}
+              />
+            </div>
                         </div>
                       )}
                     </div>

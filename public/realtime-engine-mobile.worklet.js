@@ -34,7 +34,8 @@ class Biquad {
                         - this.a1*this.y1  - this.a2*this.y2;
     this.x2=this.x1; this.x1=x;
     this.y2=this.y1; this.y1=y;
-    return (y===y && y<3 && y>-3) ? y : 0;
+    return (y===y && y<3 && y>-3) ? y : this.y1;
+
   }
   setLS(freq, sr, gainDB) {
     const A=Math.pow(10,gainDB/40);
@@ -82,11 +83,13 @@ class RealtimeEngineMobile extends AudioWorkletProcessor {
     for (let i=0; i<7; i++) { this._pinkL[i]=this._rng()*0.001; this._pinkR[i]=this._rng()*0.001; }
 
     this._brownL=this._rng()*0.001; this._brownR=this._rng()*0.001;
-    this._brownDampL=0; this._brownDampR=0;
-    this._blackDampL=0; this._blackDampR=0;
+this._brownDampL=0; this._brownDampR=0;
+this._blackL=this._rng()*0.001; this._blackR=this._rng()*0.001;
+this._blackDampL=0; this._blackDampR=0;
     this._greyL=0; this._greyR=0;
     this._blueLastL=this._rng()*0.001; this._blueLastR=this._rng()*0.001;
     this._violetLast=this._rng()*0.001;
+    this._violetNoiseLP=0;
     this._greenL=new Float32Array(4); this._greenR=new Float32Array(4);
     for (let i=0; i<4; i++) { this._greenL[i]=this._rng()*0.001; this._greenR[i]=this._rng()*0.001; }
     this._greenGrainL=0; this._greenGrainR=0;
@@ -117,6 +120,8 @@ class RealtimeEngineMobile extends AudioWorkletProcessor {
 
     // ── Smoothed mix compensation (avoids click when layer count changes) ────
     this._smMixComp = 1.0;
+    this._smMixCompTarget = 1.0;
+this._kMC = 1 - Math.exp(-1/(sampleRate*0.15));
 
     // ── Per-layer smoothed gain state ────────────────────────────────────────
     // All updated SAMPLE BY SAMPLE inside the mix loop — never block-level jumps.
@@ -249,15 +254,15 @@ class RealtimeEngineMobile extends AudioWorkletProcessor {
   }
 
   _genGreyL() {
-    const w=this._rng(), p=this._genPinkL()*0.18;
-    this._greyL=this._greyL*0.82+(w*0.62+p)*0.18;
-    return this._greyL*0.24;
-  }
-  _genGreyR() {
-    const w=this._rng(), p=this._genPinkR()*0.18;
-    this._greyR=this._greyR*0.82+(w*0.62+p)*0.18;
-    return this._greyR*0.24;
-  }
+  const w=this._rng(), p=this._rng()*0.18;
+  this._greyL=this._greyL*0.82+(w*0.62+p)*0.18;
+  return this._greyL*0.24;
+}
+_genGreyR() {
+  const w=this._rng(), p=this._rng()*0.18;
+  this._greyR=this._greyR*0.82+(w*0.62+p)*0.18;
+  return this._greyR*0.24;
+}
 
   _genBlueL() {
     const w=this._rng(), d=(w-this._blueLastL)*2.5;
@@ -274,15 +279,15 @@ class RealtimeEngineMobile extends AudioWorkletProcessor {
   }
 
   _genBlackL() {
-    this._brownL+=(this._rng()*0.01); this._brownL*=0.992;
-    if(this._brownL>1)this._brownL=1; else if(this._brownL<-1)this._brownL=-1;
-    return this._brownL*0.42;
-  }
-  _genBlackR() {
-    this._brownR+=(this._rng()*0.01); this._brownR*=0.992;
-    if(this._brownR>1)this._brownR=1; else if(this._brownR<-1)this._brownR=-1;
-    return this._brownR*0.42;
-  }
+  this._blackL+=(this._rng()*0.01); this._blackL*=0.992;
+  if(this._blackL>1)this._blackL=1; else if(this._blackL<-1)this._blackL=-1;
+  return this._blackL*0.42;
+}
+_genBlackR() {
+  this._blackR+=(this._rng()*0.01); this._blackR*=0.992;
+  if(this._blackR>1)this._blackR=1; else if(this._blackR<-1)this._blackR=-1;
+  return this._blackR*0.42;
+}
 
   _genGreenL() {
     const st=this._greenL, w=this._rng();
@@ -340,16 +345,15 @@ class RealtimeEngineMobile extends AudioWorkletProcessor {
     // continuous and the worklet's own sample-by-sample smoother handles the rest.
     let activeCount=0;
     for (let ci=0; ci<NC; ci++) {
-      // Count a layer as active if it's either smoothly fading in (smIntensity > threshold)
-      // OR if the incoming parameter just crossed zero (so we start compensating early
-      // and avoid a loud transient on the first block of a new layer).
-      if (this._smIntensity[ci]>0.005 || parameters[this._pIntensity[ci]][0]>0.001) activeCount++;
+      if (this._smIntensity[ci]>0.0001 || parameters[this._pIntensity[ci]][0]>0.0001) activeCount++;
     }
     for (let wi=0; wi<NW; wi++) {
       if (parameters[this._pWEnabled[wi]][0]>0.5) activeCount++;
     }
     const targetMixComp = 1/Math.sqrt(activeCount<1?1:activeCount);
+    this._smMixCompTarget += (targetMixComp - this._smMixCompTarget) * this._kMC;
     const BASE_GAIN=1.8;
+
 
     const kD=this._kD, kS=this._kS, kR=this._kR;
     const tmpL=this._tmpL, tmpR=this._tmpR;
@@ -403,11 +407,12 @@ class RealtimeEngineMobile extends AudioWorkletProcessor {
           for (let i=0; i<bs; i++) { tmpL[i]=this._genBlueL(); tmpR[i]=this._genBlueR(); }
           break;
         case C_VIOLET:
-          for (let i=0; i<bs; i++) {
-            const v=this._genViolet();
-            tmpL[i]=v; tmpR[i]=v*0.97+this._rng()*0.03;
-          }
-          break;
+  for (let i=0; i<bs; i++) {
+    const v=this._genViolet();
+    this._violetNoiseLP=this._violetNoiseLP*0.85+this._rng()*0.15;
+    tmpL[i]=v; tmpR[i]=v*0.97+this._violetNoiseLP*0.03;
+  }
+  break;
         case C_BLACK:
           for (let i=0; i<bs; i++) {
             const bL=this._genBlackL(), bR=this._genBlackR();
@@ -461,7 +466,7 @@ class RealtimeEngineMobile extends AudioWorkletProcessor {
         dr   += (tI            - dr)  * kD;
         smI  += (dr            - smI) * kS;
         smV  += (tV            - smV) * kS;
-        smMC += (targetMixComp - smMC) * kS;
+        smMC += (this._smMixCompTarget - smMC) * kS;
         ramp += (1             - ramp) * kR;
 
         const g = smI * smV * BASE_GAIN * smMC * ramp;
@@ -531,13 +536,13 @@ class RealtimeEngineMobile extends AudioWorkletProcessor {
     // SOFT LIMITER + NaN guard — single pass
     // ─────────────────────────────────────────────────────────────────────────
     for (let i=0; i<bs; i++) {
-      let l=L[i], r=R[i];
-      if (l!==l||!isFinite(l)) l=0;
-      if (r!==r||!isFinite(r)) r=0;
-      if (l>0.7||l<-0.7) l=Math.tanh(l*0.85)*0.98;
-      if (r>0.7||r<-0.7) r=Math.tanh(r*0.85)*0.98;
-      L[i]=l; R[i]=r;
-    }
+  let l=L[i], r=R[i];
+  if (l!==l||!isFinite(l)) l=0;
+  if (r!==r||!isFinite(r)) r=0;
+  l=Math.tanh(l*0.85)*0.98;
+  r=Math.tanh(r*0.85)*0.98;
+  L[i]=l; R[i]=r;
+}
 
     return true;
   }
