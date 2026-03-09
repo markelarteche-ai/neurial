@@ -940,7 +940,7 @@ const sliderActiveTimerRef = useRef(null);
         }
       };
 
-      engine.port.postMessage({ type: 'warmup', samples: 4800 });
+      engine.port.postMessage({ type: 'warmup', samples: 44100 });
 
       setTimeout(() => {
         if (mixerNodeRef.current && audioContextRef.current?.state === 'running') {
