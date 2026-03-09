@@ -1885,7 +1885,7 @@ const LayerCard = ({ t, c, getLayerDesc, sendParam, setLayers, sliderActiveRef, 
                   </div>
                   {Object.entries(layers).map(([t, c]) => (
   <LayerCard
-    key={t}
+    key={`${t}-${c.intensity}-${c.volume}-${c.texture}`}
     t={t}
     c={c}
     getLayerDesc={getLayerDesc}
