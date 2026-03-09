@@ -386,6 +386,12 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
 
   const natureSoundsRef = useRef(natureSounds);
   useEffect(() => { natureSoundsRef.current = natureSounds; }, [natureSounds]);
+  const layersRef     = useRef(layers);
+const brainwavesRef = useRef(brainwaves);
+const processingRef = useRef(processing);
+useEffect(() => { layersRef.current = layers; },         [layers]);
+useEffect(() => { brainwavesRef.current = brainwaves; }, [brainwaves]);
+useEffect(() => { processingRef.current = processing; }, [processing]);
 
   const isPlayingRef = useRef(false);
   useEffect(() => { isPlayingRef.current = isPlaying; }, [isPlaying]);
@@ -492,30 +498,34 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
       param.setTargetAtTime(value, t, TC);
     };
 
-    Object.entries(layers).forEach(([k, c]) => {
+    const L = layersRef.current;
+    const B = brainwavesRef.current;
+    const P = processingRef.current;
+
+    Object.entries(L).forEach(([k, c]) => {
       rampParam(`${k}_intensity`, (c.intensity ?? 0) / 100);
       rampParam(`${k}_volume`,    (c.volume ?? 100) / 100);
       rampParam(`${k}_bass`,      (c.bass ?? 50) / 100);
       rampParam(`${k}_texture`,   (c.texture ?? 50) / 100);
     });
 
-    Object.entries(brainwaves).forEach(([k, c]) => {
+    Object.entries(B).forEach(([k, c]) => {
       rampParam(`${k}_enabled`,   c.enabled ? 1 : 0);
       rampParam(`${k}_carrier`,   c.carrier ?? 200);
       rampParam(`${k}_beat`,      c.beat ?? 10);
       rampParam(`${k}_intensity`, (c.intensity ?? 50) / 100);
     });
 
-    rampParam('stereoDecorr',   (processing.stereoDecorr ?? 0) / 100);
-    rampParam('stereoWidth',    (processing.stereoWidth ?? 100) / 50);
-    rampParam('harmonicSat',    (processing.harmonicSat ?? 0) / 100);
-    rampParam('spectralDrift',  (processing.spectralDrift ?? 0) / 100);
-    rampParam('temporalSmooth', (processing.temporalSmooth ?? 0) / 100);
-    rampParam('layerInteract',  (processing.layerInteract ?? 0) / 100);
-    rampParam('microRandom',    (processing.microRandom ?? 0) / 100);
-    rampParam('treble',         (processing.treble ?? 55) / 100);
-    rampParam('mid',            (processing.mid ?? 55) / 100);
-    rampParam('pressure',       (processing.pressure ?? 50) / 100);
+    rampParam('stereoDecorr',   (P.stereoDecorr ?? 0) / 100);
+    rampParam('stereoWidth',    (P.stereoWidth ?? 100) / 50);
+    rampParam('harmonicSat',    (P.harmonicSat ?? 0) / 100);
+    rampParam('spectralDrift',  (P.spectralDrift ?? 0) / 100);
+    rampParam('temporalSmooth', (P.temporalSmooth ?? 0) / 100);
+    rampParam('layerInteract',  (P.layerInteract ?? 0) / 100);
+    rampParam('microRandom',    (P.microRandom ?? 0) / 100);
+    rampParam('treble',         (P.treble ?? 55) / 100);
+    rampParam('mid',            (P.mid ?? 55) / 100);
+    rampParam('pressure',       (P.pressure ?? 50) / 100);
     rampParam('master',         1);
   };
 
@@ -558,9 +568,11 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
     if (!ctx) return;
     if (syncThrottleRef.current) clearTimeout(syncThrottleRef.current);
     syncThrottleRef.current = setTimeout(() => {
-      syncAllRealtimeParams(ctx);
-      const f = ensureStableChain(ctx);
-      const t = ctx.currentTime;
+      const currentCtx = audioContextRef.current;
+if (!currentCtx || currentCtx.state !== 'running') return;
+syncAllRealtimeParams(currentCtx);
+const f = ensureStableChain(currentCtx);
+const t = currentCtx.currentTime;
       const TC = isMobileRef.current ? 0.25 : 0.05;
       const bassParam = f.bass.gain;
       try {
@@ -569,7 +581,7 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
         bassParam.cancelScheduledValues(t);
         bassParam.setValueAtTime(bassParam.value, t);
       }
-      bassParam.setTargetAtTime((processing.bass - 50) / 5, t, TC);
+      bassParam.setTargetAtTime((processingRef.current.bass - 50) / 5, t, TC);
     }, isMobileRef.current ? 250 : 50);
   }, [layers, brainwaves, processing, isPlaying]);
 
@@ -1641,6 +1653,7 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
       <style>{`
         *, *::before, *::after { box-sizing: border-box !important; }
         html, body, #root { margin: 0 !important; padding: 0 !important; width: 100% !important; }
+        button { -webkit-user-drag: none; }
         @keyframes neurialWaveMotion {
           0%, 100% { transform: translateY(0px); }
           50% { transform: translateY(-2px); }
@@ -1747,23 +1760,31 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
           {/* PRESETS SECTION */}
           <div style={{ padding: '24px 32px', borderBottom: '1px solid rgba(250,204,21,0.1)' }}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', isolation: 'isolate' }}>
-              {['DeepSleep', 'DeepSpace', 'CalmMind', 'MentalReset', 'DeepFocus', 'TinnitusMasking', 'ADHDSupport', 'MeditationFlow'].map(p => (
-                <button
-                  key={p}
-                  onClick={() => { if (isTransitioning) return; applyPreset(p); }}
-                  style={activePreset === p ? {
-                    padding: '12px 16px', borderRadius: '8px', fontSize: '14px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.3s',
-                    background: 'linear-gradient(to right,#facc15,#fde047)', color: '#000', border: '2px solid #eab308',
-                    boxShadow: '0 4px 6px rgba(250,204,21,0.5)', outline: '2px solid rgba(250,204,21,0.5)', outlineOffset: '2px'
-                  } : {
-                    padding: '12px 16px', borderRadius: '8px', fontSize: '14px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.3s',
-                    background: 'linear-gradient(to right,#1e293b,#0f172a)', color: '#fff', border: '2px solid rgba(250,204,21,0.3)'
-                  }}
-                >
-                  {p.replace(/([A-Z])/g, ' $1').trim()}
-                </button>
-              ))}
-            </div>
+  {['DeepSleep', 'DeepSpace', 'CalmMind', 'MentalReset', 'DeepFocus', 'TinnitusMasking', 'ADHDSupport', 'MeditationFlow'].map(p => (
+    <button
+      key={p}
+      onClick={() => { if (isTransitioning) return; applyPreset(p); }}
+      style={activePreset === p ? {
+        touchAction: 'manipulation',
+        userSelect: 'none',
+        WebkitUserDrag: 'none',
+        WebkitTapHighlightColor: 'transparent',
+        padding: '12px 16px', borderRadius: '8px', fontSize: '14px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.3s',
+        background: 'linear-gradient(to right,#facc15,#fde047)', color: '#000', border: '2px solid #eab308',
+        boxShadow: '0 4px 6px rgba(250,204,21,0.5)', outline: '2px solid rgba(250,204,21,0.5)', outlineOffset: '2px'
+      } : {
+        touchAction: 'manipulation',
+        userSelect: 'none',
+        WebkitUserDrag: 'none',
+        WebkitTapHighlightColor: 'transparent',
+        padding: '12px 16px', borderRadius: '8px', fontSize: '14px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.3s',
+        background: 'linear-gradient(to right,#1e293b,#0f172a)', color: '#fff', border: '2px solid rgba(250,204,21,0.3)'
+      }}
+    >
+      {p.replace(/([A-Z])/g, ' $1').trim()}
+    </button>
+  ))}
+</div>
           </div>
 
           {/* TABS */}
