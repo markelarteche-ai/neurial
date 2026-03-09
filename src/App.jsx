@@ -1652,75 +1652,7 @@ const sliderActiveTimerRef = useRef(null);
       </div>
     );
   };
-const LayerCard = ({ t, c, getLayerDesc, sendParam, setLayers, sliderActiveRef, sliderActiveTimerRef, NT }) => {
-  const [localIntensity, setLocalIntensity] = React.useState(c.intensity);
-  const [localVolume, setLocalVolume] = React.useState(c.volume);
-  const [localTexture, setLocalTexture] = React.useState(c.texture);
 
-  return (
-    <div style={{ padding: '16px', borderRadius: '8px', transition: 'all 0.3s', background: 'rgba(30,41,59,0.5)', border: '2px solid rgba(250,204,21,0.2)', overflow: 'visible', textAlign: 'left' }}>
-      <h4 style={{ color: '#fef08a', fontWeight: 500, fontSize: '14px', marginBottom: '8px', textTransform: 'capitalize', margin: '0 0 8px 0' }}>{t} Noise</h4>
-      <p style={{ fontSize: '12px', marginBottom: '12px', color: 'rgba(254,240,138,0.6)', margin: '0 0 12px 0' }}>{getLayerDesc(t)}</p>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-        <div style={{ paddingBottom: '4px' }}>
-          <label style={{ display: 'block', fontSize: '12px', marginBottom: '8px', color: 'rgba(254,240,138,0.7)' }}>Intensity: <span {...NT}>{localIntensity}%</span></label>
-          <input type="range" min="0" max="100" defaultValue={localIntensity}
-            onChange={(e) => {
-              const v = parseInt(e.target.value);
-              setLocalIntensity(v);
-              sliderActiveRef.current = true;
-              clearTimeout(sliderActiveTimerRef.current);
-              sliderActiveTimerRef.current = setTimeout(() => { sliderActiveRef.current = false; }, 300);
-              sendParam(`${t}_intensity`, v / 100);
-            }}
-            onPointerUp={(e) => {
-              const v = parseInt(e.target.value);
-              setLayers(pr => ({ ...pr, [t]: { ...pr[t], intensity: v } }));
-            }}
-          />
-        </div>
-        {localIntensity > 0 && (
-          <>
-            <div style={{ paddingBottom: '4px' }}>
-              <label style={{ display: 'block', fontSize: '12px', marginBottom: '8px', color: 'rgba(254,240,138,0.7)' }}>Volume: <span {...NT}>{localVolume}%</span></label>
-              <input type="range" min="0" max="100" defaultValue={localVolume}
-                onChange={(e) => {
-                  const v = parseInt(e.target.value);
-                  setLocalVolume(v);
-                  sliderActiveRef.current = true;
-                  clearTimeout(sliderActiveTimerRef.current);
-                  sliderActiveTimerRef.current = setTimeout(() => { sliderActiveRef.current = false; }, 300);
-                  sendParam(`${t}_volume`, v / 100);
-                }}
-                onPointerUp={(e) => {
-                  const v = parseInt(e.target.value);
-                  setLayers(pr => ({ ...pr, [t]: { ...pr[t], volume: v } }));
-                }}
-              />
-            </div>
-            <div style={{ paddingBottom: '4px' }}>
-              <label style={{ display: 'block', fontSize: '12px', marginBottom: '8px', color: 'rgba(254,240,138,0.7)' }}>Texture: <span {...NT}>{localTexture}%</span></label>
-              <input type="range" min="0" max="100" defaultValue={localTexture}
-                onChange={(e) => {
-                  const v = parseInt(e.target.value);
-                  setLocalTexture(v);
-                  sliderActiveRef.current = true;
-                  clearTimeout(sliderActiveTimerRef.current);
-                  sliderActiveTimerRef.current = setTimeout(() => { sliderActiveRef.current = false; }, 300);
-                  sendParam(`${t}_texture`, v / 100);
-                }}
-                onPointerUp={(e) => {
-                  const v = parseInt(e.target.value);
-                  setLayers(pr => ({ ...pr, [t]: { ...pr[t], texture: v } }));
-                }}
-              />
-            </div>
-          </>
-        )}
-      </div>
-    </div>
-  );
-};
   // ================= UI =================
   return (
     <div style={{ width: '100vw', minHeight: '100vh', background: 'linear-gradient(135deg,#020617,#0f172a,#020617)', overflowX: 'hidden' }}>
@@ -1884,18 +1816,56 @@ const LayerCard = ({ t, c, getLayerDesc, sendParam, setLayers, sliderActiveRef, 
                     <p style={{ color: '#fef08a', fontSize: '12px', margin: 0 }}>🎨 <strong>Sound Colors:</strong> Each noise type has a unique frequency profile. Mix and match to create your perfect soundscape with crystal-clear 3D audio. &nbsp;·&nbsp; 🎧 Best experienced with headphones on</p>
                   </div>
                   {Object.entries(layers).map(([t, c]) => (
-  <LayerCard
-    key={`${t}-${c.intensity}-${c.volume}-${c.texture}`}
-    t={t}
-    c={c}
-    getLayerDesc={getLayerDesc}
-    sendParam={sendParam}
-    setLayers={setLayers}
-    sliderActiveRef={sliderActiveRef}
-    sliderActiveTimerRef={sliderActiveTimerRef}
-    NT={NT}
-  />
-))}
+                    <div key={t} style={{ padding: '16px', borderRadius: '8px', transition: 'all 0.3s', background: 'rgba(30,41,59,0.5)', border: '2px solid rgba(250,204,21,0.2)', overflow: 'visible', textAlign: 'left' }}>
+                      <h4 style={{ color: '#fef08a', fontWeight: 500, fontSize: '14px', marginBottom: '8px', textTransform: 'capitalize', margin: '0 0 8px 0' }}>{t} Noise</h4>
+                      <p style={{ fontSize: '12px', marginBottom: '12px', color: 'rgba(254,240,138,0.6)', margin: '0 0 12px 0' }}>{getLayerDesc(t)}</p>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                        <div style={{ paddingBottom: '4px' }}>
+                          <label style={{ display: 'block', fontSize: '12px', marginBottom: '8px', color: 'rgba(254,240,138,0.7)' }}>Intensity: <span {...NT}>{c.intensity}%</span></label>
+                          <input type="range" min="0" max="100" value={c.intensity}
+                            onChange={(e) => {
+  const v = parseInt(e.target.value);
+  setLayers(pr => ({ ...pr, [t]: { ...pr[t], intensity: v } }));
+  sliderActiveRef.current = true;
+  clearTimeout(sliderActiveTimerRef.current);
+  sliderActiveTimerRef.current = setTimeout(() => { sliderActiveRef.current = false; }, 300);
+  sendParam(`${t}_intensity`, v / 100);
+}}
+                          />
+                        </div>
+                        {c.intensity > 0 && (
+                          <>
+                            <div style={{ paddingBottom: '4px' }}>
+                              <label style={{ display: 'block', fontSize: '12px', marginBottom: '8px', color: 'rgba(254,240,138,0.7)' }}>Volume: <span {...NT}>{c.volume}%</span></label>
+                              <input type="range" min="0" max="100" value={c.volume}
+                                onChange={(e) => {
+  const v = parseInt(e.target.value);
+  setLayers(pr => ({ ...pr, [t]: { ...pr[t], volume: v } }));
+  sliderActiveRef.current = true;
+  clearTimeout(sliderActiveTimerRef.current);
+  sliderActiveTimerRef.current = setTimeout(() => { sliderActiveRef.current = false; }, 300);
+  sendParam(`${t}_volume`, v / 100);
+}}
+                              />
+                            </div>
+                            <div style={{ paddingBottom: '4px' }}>
+                              <label style={{ display: 'block', fontSize: '12px', marginBottom: '8px', color: 'rgba(254,240,138,0.7)' }}>Texture: <span {...NT}>{c.texture}%</span></label>
+                              <input type="range" min="0" max="100" value={c.texture}
+                                onChange={(e) => {
+  const v = parseInt(e.target.value);
+  setLayers(pr => ({ ...pr, [t]: { ...pr[t], texture: v } }));
+  sliderActiveRef.current = true;
+  clearTimeout(sliderActiveTimerRef.current);
+  sliderActiveTimerRef.current = setTimeout(() => { sliderActiveRef.current = false; }, 300);
+  sendParam(`${t}_texture`, v / 100);
+}}
+/>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  ))}
 </div>
 )}
 
@@ -1964,51 +1934,42 @@ const LayerCard = ({ t, c, getLayerDesc, sendParam, setLayers, sliderActiveRef, 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <div style={{ paddingBottom: '4px' }}>
               <label style={{ display: 'block', fontSize: '12px', marginBottom: '8px', color: 'rgba(254,240,138,0.7)' }}>Carrier Frequency: <span {...NT}>{c.carrier} Hz</span></label>
-              <input type="range" min="100" max="400" defaultValue={c.carrier}
-  onChange={(e) => {
-    const v = parseInt(e.target.value);
-    sliderActiveRef.current = true;
-    clearTimeout(sliderActiveTimerRef.current);
-    sliderActiveTimerRef.current = setTimeout(() => { sliderActiveRef.current = false; }, 300);
-    sendParam(`${t}_carrier`, v);
-  }}
-  onPointerUp={(e) => {
-    const v = parseInt(e.target.value);
-    setBrainwaves(pr => ({ ...pr, [t]: { ...pr[t], carrier: v } }));
-  }}
-/>
+              <input type="range" min="100" max="400" value={c.carrier}
+                onChange={(e) => {
+                  const v = parseInt(e.target.value);
+                  setBrainwaves(pr => ({ ...pr, [t]: { ...pr[t], carrier: v } }));
+                  sliderActiveRef.current = true;
+                  clearTimeout(sliderActiveTimerRef.current);
+                  sliderActiveTimerRef.current = setTimeout(() => { sliderActiveRef.current = false; }, 300);
+                  sendParam(`${t}_carrier`, v);
+                }}
+              />
             </div>
             <div style={{ paddingBottom: '4px' }}>
               <label style={{ display: 'block', fontSize: '12px', marginBottom: '8px', color: 'rgba(254,240,138,0.7)' }}>Beat Frequency: <span {...NT}>{c.beat} Hz</span></label>
-              <input type="range" min="1" max="40" defaultValue={c.beat}
-  onChange={(e) => {
-    const v = parseInt(e.target.value);
-    sliderActiveRef.current = true;
-    clearTimeout(sliderActiveTimerRef.current);
-    sliderActiveTimerRef.current = setTimeout(() => { sliderActiveRef.current = false; }, 300);
-    sendParam(`${t}_beat`, v);
-  }}
-  onPointerUp={(e) => {
-    const v = parseInt(e.target.value);
-    setBrainwaves(pr => ({ ...pr, [t]: { ...pr[t], beat: v } }));
-  }}
-/>
+              <input type="range" min="1" max="40" value={c.beat}
+                onChange={(e) => {
+                  const v = parseInt(e.target.value);
+                  setBrainwaves(pr => ({ ...pr, [t]: { ...pr[t], beat: v } }));
+                  sliderActiveRef.current = true;
+                  clearTimeout(sliderActiveTimerRef.current);
+                  sliderActiveTimerRef.current = setTimeout(() => { sliderActiveRef.current = false; }, 300);
+                  sendParam(`${t}_beat`, v);
+                }}
+              />
             </div>
             <div style={{ paddingBottom: '4px' }}>
               <label style={{ display: 'block', fontSize: '12px', marginBottom: '8px', color: 'rgba(254,240,138,0.7)' }}>Wave Intensity: <span {...NT}>{c.intensity}%</span></label>
-              <input type="range" min="0" max="100" defaultValue={c.intensity}
-  onChange={(e) => {
-    const v = parseInt(e.target.value);
-    sliderActiveRef.current = true;
-    clearTimeout(sliderActiveTimerRef.current);
-    sliderActiveTimerRef.current = setTimeout(() => { sliderActiveRef.current = false; }, 300);
-    sendParam(`${t}_intensity`, v / 100);
-  }}
-  onPointerUp={(e) => {
-    const v = parseInt(e.target.value);
-    setLayers(pr => ({ ...pr, [t]: { ...pr[t], intensity: v } }));
-  }}
-/>
+              <input type="range" min="0" max="100" value={c.intensity}
+                onChange={(e) => {
+                  const v = parseInt(e.target.value);
+                  setBrainwaves(pr => ({ ...pr, [t]: { ...pr[t], intensity: v } }));
+                  sliderActiveRef.current = true;
+                  clearTimeout(sliderActiveTimerRef.current);
+                  sliderActiveTimerRef.current = setTimeout(() => { sliderActiveRef.current = false; }, 300);
+                  sendParam(`${t}_intensity`, v / 100);
+                }}
+              />
             </div>
                         </div>
                       )}
