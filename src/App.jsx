@@ -419,42 +419,39 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
   );
 
   const syncAllRealtimeParams = (ctx) => {
-  const node = mixerNodeRef.current;
-  if (!ctx || !node || ctx.state !== 'running') return;
-  const t = ctx.currentTime;
-  const TC = isMobileRef.current ? 0.15 : 0.05;
+    const node = mixerNodeRef.current;
+    if (!ctx || !node || ctx.state !== 'running') return;
+    const t = ctx.currentTime;
+    // 0.05 timeConstant (~50ms) eliminates zipper noise on mobile
+    // where audio buffers are larger and parameter jumps are more audible
+const TC = isMobileRef.current ? 0.2 : 0.05;
 
-  const setP = (name, value) => {
-    const p = node.parameters.get(name);
-    if (!p) return;
-    try { p.cancelAndHoldAtTime(t); } catch { p.cancelScheduledValues(t); p.setValueAtTime(p.value, t); }
-    p.setTargetAtTime(value, t, TC);
+    Object.entries(layers).forEach(([k, c]) => {
+      node.parameters.get(`${k}_intensity`)?.setTargetAtTime((c.intensity ?? 0) / 100, t, TC);
+      node.parameters.get(`${k}_volume`)?.setTargetAtTime((c.volume ?? 100) / 100, t, TC);
+      node.parameters.get(`${k}_bass`)?.setTargetAtTime((c.bass ?? 50) / 100, t, TC);
+      node.parameters.get(`${k}_texture`)?.setTargetAtTime((c.texture ?? 50) / 100, t, TC);
+    });
+
+    Object.entries(brainwaves).forEach(([k, c]) => {
+      node.parameters.get(`${k}_enabled`)?.setTargetAtTime(c.enabled ? 1 : 0, t, TC);
+      node.parameters.get(`${k}_carrier`)?.setTargetAtTime(c.carrier ?? 200, t, TC);
+      node.parameters.get(`${k}_beat`)?.setTargetAtTime(c.beat ?? 10, t, TC);
+      node.parameters.get(`${k}_intensity`)?.setTargetAtTime((c.intensity ?? 50) / 100, t, TC);
+    });
+
+    node.parameters.get('stereoDecorr')?.setTargetAtTime((processing.stereoDecorr ?? 0) / 100, t, TC);
+    node.parameters.get('stereoWidth')?.setTargetAtTime((processing.stereoWidth ?? 100) / 50, t, TC);
+    node.parameters.get('harmonicSat')?.setTargetAtTime((processing.harmonicSat ?? 0) / 100, t, TC);
+    node.parameters.get('spectralDrift')?.setTargetAtTime((processing.spectralDrift ?? 0) / 100, t, TC);
+    node.parameters.get('temporalSmooth')?.setTargetAtTime((processing.temporalSmooth ?? 0) / 100, t, TC);
+    node.parameters.get('layerInteract')?.setTargetAtTime((processing.layerInteract ?? 0) / 100, t, TC);
+    node.parameters.get('microRandom')?.setTargetAtTime((processing.microRandom ?? 0) / 100, t, TC);
+    node.parameters.get('treble')?.setTargetAtTime((processing.treble ?? 55) / 100, t, TC);
+    node.parameters.get('mid')?.setTargetAtTime((processing.mid ?? 55) / 100, t, TC);
+    node.parameters.get('pressure')?.setTargetAtTime((processing.pressure ?? 50) / 100, t, TC);
+    node.parameters.get('master')?.setTargetAtTime(1, t, TC);
   };
-
-  Object.entries(layers).forEach(([k, c]) => {
-    setP(`${k}_intensity`, (c.intensity ?? 0) / 100);
-    setP(`${k}_volume`,    (c.volume ?? 100) / 100);
-    setP(`${k}_bass`,      (c.bass ?? 50) / 100);
-    setP(`${k}_texture`,   (c.texture ?? 50) / 100);
-  });
-  Object.entries(brainwaves).forEach(([k, c]) => {
-    setP(`${k}_enabled`,   c.enabled ? 1 : 0);
-    setP(`${k}_carrier`,   c.carrier ?? 200);
-    setP(`${k}_beat`,      c.beat ?? 10);
-    setP(`${k}_intensity`, (c.intensity ?? 50) / 100);
-  });
-  setP('stereoDecorr',   (processing.stereoDecorr ?? 0) / 100);
-  setP('stereoWidth',    (processing.stereoWidth ?? 100) / 50);
-  setP('harmonicSat',    (processing.harmonicSat ?? 0) / 100);
-  setP('spectralDrift',  (processing.spectralDrift ?? 0) / 100);
-  setP('temporalSmooth', (processing.temporalSmooth ?? 0) / 100);
-  setP('layerInteract',  (processing.layerInteract ?? 0) / 100);
-  setP('microRandom',    (processing.microRandom ?? 0) / 100);
-  setP('treble',         (processing.treble ?? 55) / 100);
-  setP('mid',            (processing.mid ?? 55) / 100);
-  setP('pressure',       (processing.pressure ?? 50) / 100);
-  setP('master',         1);
-};
 
   const ensureStableChain = (ctx) => {
     const f = filterNodesRef.current;
@@ -485,37 +482,24 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
   if (!node || !ctx || ctx.state !== 'running') return;
   const param = node.parameters.get(name);
   if (!param) return;
-  const TC = isMobileRef.current ? 0.15 : 0.08;
-  // Limpiar la cola de automation antes de añadir la nueva curva.
-  // Sin esto, setTargetAtTime acumula exponenciales solapadas → click.
-  try {
-    param.cancelAndHoldAtTime(ctx.currentTime);
-  } catch {
-    param.cancelScheduledValues(ctx.currentTime);
-    param.setValueAtTime(param.value, ctx.currentTime);
-  }
+  const TC = isMobileRef.current ? 0.2 : 0.08;
   param.setTargetAtTime(value, ctx.currentTime, TC);
 };
 
   const syncThrottleRef = useRef(null);
 useEffect(() => {
-  if (!isPlaying) return;
-  const ctx = audioContextRef.current;
-  if (!ctx) return;
-  if (syncThrottleRef.current) clearTimeout(syncThrottleRef.current);
-  syncThrottleRef.current = setTimeout(() => {
-    // Solo el bass filter nativo — los params del worklet ya los envía sendParam
-    const f = filterNodesRef.current;
-    if (f?.bass && ctx.state === 'running') {
-      const t = ctx.currentTime;
-      const TC = isMobileRef.current ? 0.15 : 0.05;
-      f.bass.gain.cancelAndHoldAtTime ? 
-        f.bass.gain.cancelAndHoldAtTime(t) : 
-        f.bass.gain.cancelScheduledValues(t);
-      f.bass.gain.setTargetAtTime((processing.bass - 50) / 5, t, TC);
-    }
-  }, isMobileRef.current ? 80 : 30);
-}, [layers, brainwaves, processing, isPlaying]);
+    if (!isPlaying) return;
+    const ctx = audioContextRef.current;
+    if (!ctx) return;
+    // Throttle to max once every 30ms to avoid zipper noise from rapid slider moves on mobile
+    if (syncThrottleRef.current) clearTimeout(syncThrottleRef.current);
+    syncThrottleRef.current = setTimeout(() => {
+  syncAllRealtimeParams(ctx);
+  const f = ensureStableChain(ctx);
+  const t = ctx.currentTime;
+  f.bass.gain.setTargetAtTime((processing.bass-50)/5, t, isMobileRef.current ? 0.2 : 0.05);
+}, isMobileRef.current ? 100 : 50);
+  }, [layers, brainwaves, processing, isPlaying]);
 
   useEffect(() => {
     Object.entries(natureSounds).forEach(([soundKey, cfg]) => {
@@ -779,8 +763,7 @@ workletLoadedRef.current = false;
     try {
       // Create context immediately inside user gesture (critical for iOS/Android)
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
-      const sr = isMobileRef.current ? 22050 : 44100;
-const ctx = new AudioCtx({ latencyHint: isMobileRef.current ? 'playback' : 'interactive', sampleRate: sr });
+      const ctx = new AudioCtx({ latencyHint: 'interactive', sampleRate: 44100 });
 
       // iOS requires resume() synchronously inside the gesture handler
       // We call it before any await to satisfy the user-gesture requirement
@@ -842,14 +825,22 @@ engine.port.onmessage = (e) => {
   if (e.data.type === 'ready') {
     forceParams();
     syncAllRealtimeParams(ctx);
+    // DIAGNÓSTICO: activar medición
+    engine.port.postMessage({ type: 'diagStart' });
     setTimeout(() => {
-  if (audioContextRef.current?.state === 'running' && mixerNodeRef.current) {
-    forceParams();
-    syncAllRealtimeParams(audioContextRef.current);
-  }
-}, 500);
-  } else if (e.data.type === 'diagnostics') {
-    console.log('🔍 WORKLET:', JSON.stringify(e.data));
+      if (audioContextRef.current?.state === 'running' && mixerNodeRef.current) {
+        forceParams();
+        syncAllRealtimeParams(audioContextRef.current);
+      }
+    }, 500);
+  } else if (e.data.type === 'diagReport') {
+    // Cada evento tiene: type, block, at (ms), y según tipo:
+    // GAP: gapMs (cuánto retrasó el scheduler), expectedMs, actualMs
+    // DSP_JUMP: prevL, currL, jump (salto de amplitud)
+    // activeLayers: cuántas layers había en ese momento
+    console.warn('🔍 DIAG EVENTS:', JSON.stringify(e.data.events, null, 2));
+  } else if (e.data.type === 'diagDone') {
+    console.log('🔍 DIAG DONE — total blocks:', e.data.blocks);
   }
 };
 
@@ -2117,4 +2108,4 @@ setTimeout(() => {
   );
 };
 
-export default AdvancedSoundEngine;
+export default AdvancedSoundEngine
