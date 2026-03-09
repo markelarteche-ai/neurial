@@ -480,11 +480,11 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
     const node = mixerNodeRef.current;
     const ctx = audioContextRef.current;
     if (!node || !ctx || ctx.state !== 'running') return;
-    node.parameters.get(name)?.setTargetAtTime(value, ctx.currentTime, 0.08);
+    node.parameters.get(name)?.setTargetAtTime(value, ctx.currentTime, 0.15);
   };
 
   const syncThrottleRef = useRef(null);
-  useEffect(() => {
+useEffect(() => {
     if (!isPlaying) return;
     const ctx = audioContextRef.current;
     if (!ctx) return;
@@ -495,7 +495,7 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
       const f = ensureStableChain(ctx);
       const t = ctx.currentTime;
       f.bass.gain.setTargetAtTime((processing.bass-50)/5, t, 0.05);
-    }, 16);
+    }, 50);
   }, [layers, brainwaves, processing, isPlaying]);
 
   useEffect(() => {
