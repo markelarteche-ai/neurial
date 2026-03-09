@@ -432,10 +432,13 @@ class RealtimeEngineMobile extends AudioWorkletProcessor {
         }
       }
 
-      // ── 2. Pre-scale with smoothed gain BEFORE biquads ───────────────────────
-      // Biquads must see a smoothly ramped signal. If we scale after filtering,
-      // the filter state loads at full amplitude on layer activation — click.
-      // Scaling before means filter state builds gradually with the signal.
+      // ── 2. Biquad passes ─────────────────────────────────────────────────────
+      for (let i=0; i<bs; i++) tmpL[i]=fL0.process(tmpL[i]);
+      for (let i=0; i<bs; i++) tmpL[i]=fL1.process(tmpL[i]);
+      for (let i=0; i<bs; i++) tmpR[i]=fR0.process(tmpR[i]);
+      for (let i=0; i<bs; i++) tmpR[i]=fR1.process(tmpR[i]);
+
+      // ── 3. Mix with sample-by-sample gain smoothing ───────────────────────
       let smI  = this._smIntensity[ci];
       let smV  = this._smVolume[ci];
       let dr   = this._densityRamp[ci];
@@ -444,34 +447,22 @@ class RealtimeEngineMobile extends AudioWorkletProcessor {
       for (let i=0; i<bs; i++) {
         const tI = ipIsAR  ? ipArr[i]  : ipArr[0];
         const tV = volIsAR ? volArr[i] : volArr[0];
-        dr   += (tI - dr)  * kD;
-        smI  += (dr - smI) * kS;
-        smV  += (tV - smV) * kS;
-        ramp += (1  - ramp) * kR;
-        const g = smI * smV * BASE_GAIN * ramp;
-        tmpL[i] *= g;
-        tmpR[i] *= g;
+        dr   += (tI            - dr)  * kD;
+        smI  += (dr            - smI) * kS;
+        smV  += (tV            - smV) * kS;
+        smMC += (targetMixComp - smMC) * kS;
+        ramp += (1             - ramp) * kR;
+        const g = smI * smV * BASE_GAIN * smMC * ramp;
+        const mid  = (tmpL[i]+tmpR[i]) * 0.5;
+        const side = (tmpL[i]-tmpR[i]) * 0.4;
+        L[i] += (mid+side) * g;
+        R[i] += (mid-side) * g;
       }
 
       this._smIntensity[ci] = smI;
       this._smVolume[ci]    = smV;
       this._densityRamp[ci] = dr;
       this._onRamp[ci]      = ramp;
-
-      // ── 3. Biquad passes — signal already gain-scaled ─────────────────────
-      for (let i=0; i<bs; i++) tmpL[i]=fL0.process(tmpL[i]);
-      for (let i=0; i<bs; i++) tmpL[i]=fL1.process(tmpL[i]);
-      for (let i=0; i<bs; i++) tmpR[i]=fR0.process(tmpR[i]);
-      for (let i=0; i<bs; i++) tmpR[i]=fR1.process(tmpR[i]);
-
-      // ── 4. Mix into output with M/S and smoothed mixComp ─────────────────
-      for (let i=0; i<bs; i++) {
-        smMC += (targetMixComp - smMC) * kS;
-        const mid  = (tmpL[i]+tmpR[i]) * 0.5;
-        const side = (tmpL[i]-tmpR[i]) * 0.4;
-        L[i] += (mid+side) * smMC;
-        R[i] += (mid-side) * smMC;
-      }
       // smMC continues into next layer
     }
 
@@ -527,15 +518,17 @@ class RealtimeEngineMobile extends AudioWorkletProcessor {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // SOFT LIMITER + NaN guard — single pass
+    // OUTPUT SATURATOR + NaN guard
+    // Always-on soft knee: identity below ~0.5, gentle saturation above.
+    // No conditional branches = no discontinuities at a threshold crossing.
+    // f(x) = x / (1 + |x|*0.35)  — cheap, smooth, never clips to hard ±1
     // ─────────────────────────────────────────────────────────────────────────
     for (let i=0; i<bs; i++) {
       let l=L[i], r=R[i];
       if (l!==l||!isFinite(l)) l=0;
       if (r!==r||!isFinite(r)) r=0;
-      if (l>0.7||l<-0.7) l=Math.tanh(l*0.85)*0.98;
-      if (r>0.7||r<-0.7) r=Math.tanh(r*0.85)*0.98;
-      L[i]=l; R[i]=r;
+      L[i] = l / (1 + (l<0?-l:l) * 0.35);
+      R[i] = r / (1 + (r<0?-r:r) * 0.35);
     }
 
     return true;
