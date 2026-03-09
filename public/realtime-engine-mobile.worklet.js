@@ -1,36 +1,15 @@
-// REALTIME AUDIO ENGINE — MOBILE WORKLET v5.4 ANTI-CLICK
+// REALTIME AUDIO ENGINE — MOBILE WORKLET v5.0
 // ─────────────────────────────────────────────────────────────────────────────
-// Anti-click strategy — completely rethought:
+// Anti-click design — every source of discontinuity eliminated:
 //
-//   CORE INSIGHT: On mobile, Web Audio a-rate params are USELESS for smooth
-//   control. The browser's audio thread processes 512–4096 samples at once.
-//   Even with cancelAndHoldAtTime + setTargetAtTime, the param value seen by
-//   the worklet can jump discontinuously at block boundaries because the
-//   automation timeline and the render thread are not sample-synchronized on
-//   all mobile browsers (especially iOS Safari and Android Chrome on ARM).
-//
-//   SOLUTION: IGNORE WEB AUDIO PARAM AUTOMATION ENTIRELY FOR GAIN CONTROL.
-//
-//   Instead:
-//   1. Read the param value ONCE per block (just [0], never a-rate array).
-//   2. Store it as a TARGET in the worklet's own state.
-//   3. Smooth toward that target SAMPLE BY SAMPLE using very long TCs
-//      (400ms–600ms) — longer than any realistic mobile buffer.
-//   4. The smoother is a simple one-pole IIR: y += (target - y) * k
-//      This is mathematically guaranteed to be click-free because it never
-//      jumps — it always approaches the target asymptotically.
-//   5. Mix compensation uses the same smoothed values, not raw params.
-//   6. Extra DC-blocking per-output sample to catch any residual glitch.
-//   7. Hard clamp on all intermediate values — NaN/Inf cannot propagate.
-//
-//   WHY THIS WORKS:
-//   - No block-boundary discontinuities: the smoother state carries over
-//     between blocks seamlessly.
-//   - No dependency on Web Audio automation timing: we just read the param
-//     target once and smooth ourselves.
-//   - The long TC means even if the target jumps from 0 to 1 in one block,
-//     the output only moves by k per sample — imperceptible.
-//   - Zero allocations in process(). All state pre-allocated.
+//   1. ALL gain changes sample-by-sample — no block-level jumps ever.
+//   2. mixComp smoothed sample-by-sample across ALL layers in one running var.
+//   3. Inactive layers: NO instant reset. _densityRamp and _onRamp decay
+//      naturally through the same smoothers — zero abrupt state changes.
+//   4. Output saturator is branch-free: x/(1+|x|*k) — no threshold crossing.
+//   5. Zero allocations in process(). All buffers pre-allocated.
+//   6. a-rate params read per-sample when slider is moving.
+//   7. Biquad NaN clip extended to ±8 to avoid false-zeroing loud transients.
 // ─────────────────────────────────────────────────────────────────────────────
 
 class Biquad {
@@ -40,19 +19,11 @@ class Biquad {
     this.x1=0; this.x2=0; this.y1=0; this.y2=0;
   }
   process(x) {
-    // Clamp input — prevents filter blowup without state reset
-    if (x > 2) x = 2; else if (x < -2) x = -2;
-    let y = this.b0*x + this.b1*this.x1 + this.b2*this.x2
-                      - this.a1*this.y1  - this.a2*this.y2;
-    // NaN guard: if y is NaN, replace with 0 but DO NOT reset state to 0.
-    // Resetting state causes a hard discontinuity. Instead let the filter
-    // recover naturally — the IIR will stabilize within a few samples.
-    if (y !== y || !isFinite(y)) y = 0;
-    // Clamp output to prevent runaway without a state reset jump
-    if (y > 3) y = 3; else if (y < -3) y = -3;
+    const y = this.b0*x + this.b1*this.x1 + this.b2*this.x2
+                        - this.a1*this.y1  - this.a2*this.y2;
     this.x2=this.x1; this.x1=x;
     this.y2=this.y1; this.y1=y;
-    return y;
+    return (y===y && y<8 && y>-8) ? y : 0;
   }
   setLS(freq, sr, gainDB) {
     const A=Math.pow(10,gainDB/40);
@@ -89,7 +60,6 @@ class RealtimeEngineMobile extends AudioWorkletProcessor {
     super(options);
     const sr = sampleRate;
     this._ready = false;
-    this._sr = sr;
 
     // ── RNG ──────────────────────────────────────────────────────────────────
     this._rngS = 0x12345678;
@@ -99,7 +69,6 @@ class RealtimeEngineMobile extends AudioWorkletProcessor {
     this._pinkL = new Float32Array(7);
     this._pinkR = new Float32Array(7);
     for (let i=0; i<7; i++) { this._pinkL[i]=this._rng()*0.001; this._pinkR[i]=this._rng()*0.001; }
-
     this._brownL=this._rng()*0.001; this._brownR=this._rng()*0.001;
     this._brownDampL=0; this._brownDampR=0;
     this._blackDampL=0; this._blackDampR=0;
@@ -113,7 +82,7 @@ class RealtimeEngineMobile extends AudioWorkletProcessor {
     this._greenBreath=Math.random()*Math.PI*2;
     this._greenFillL=0; this._greenFillR=0;
 
-    // ── Biquad filters ───────────────────────────────────────────────────────
+    // ── Biquad filters — layout: [ci*4+0]=L_ls, [+1]=L_hs, [+2]=R_ls, [+3]=R_hs
     this._filters = [];
     for (let i=0; i<NC*4; i++) this._filters.push(new Biquad());
     const CFG = [
@@ -134,38 +103,14 @@ class RealtimeEngineMobile extends AudioWorkletProcessor {
       this._filters[ci*4+3].setHS(hf,sr,hg);
     }
 
-    // ── THE KEY ANTI-CLICK STATE ──────────────────────────────────────────────
-    // These are the WORKLET-OWNED smooth values. We NEVER jump these.
-    // They only move via the one-pole IIR smoother inside process().
-    // Web Audio params are just "suggestions" — we read them as targets only.
+    // ── Per-layer gain smoothers — NEVER reset instantaneously ───────────────
+    this._smIntensity = new Float32Array(NC);
+    this._smVolume    = new Float32Array(NC).fill(1);
+    this._densityRamp = new Float32Array(NC);
+    this._onRamp      = new Float32Array(NC);
 
-    // Long TC smoothers — 500ms means even a 4096-sample buffer (~85ms)
-    // only moves the gain by ~1-exp(-85/500) ≈ 15.5% per block max.
-    // That's a smooth ramp, not a click.
-    this._TC_SLOW = 0.50;   // 500ms — for intensity/volume (main gain)
-    this._TC_MED  = 0.30;   // 300ms — for mix compensation
-    this._TC_FAST = 0.08;   // 80ms  — for on-ramp (layer activation)
-
-    this._kSlow = 1 - Math.exp(-1/(sr * this._TC_SLOW));
-    this._kMed  = 1 - Math.exp(-1/(sr * this._TC_MED));
-    this._kFast = 1 - Math.exp(-1/(sr * this._TC_FAST));
-
-    // Per-layer smoothed state — these are the ACTUAL gain values used in mix
-    this._smIntensity = new Float32Array(NC);  // smoothed intensity (0-1)
-    this._smVolume    = new Float32Array(NC).fill(1); // smoothed volume (0-1)
-    this._smOnRamp    = new Float32Array(NC);  // activation ramp (0→1)
-
-    // Target values read from params each block
-    this._tgtIntensity = new Float32Array(NC);
-    this._tgtVolume    = new Float32Array(NC).fill(1);
-
-    // Smoothed mix compensation
+    // ── Smoothed mix compensation ─────────────────────────────────────────────
     this._smMixComp = 1.0;
-
-    // DC blocker state — catches any residual glitch energy
-    this._dcL = 0; this._dcR = 0;
-    this._dcPrevL = 0; this._dcPrevR = 0;
-    this._dcCoeff = 1 - (2 * Math.PI * 10 / sr); // 10Hz HPF
 
     // ── Brainwave phases ──────────────────────────────────────────────────────
     this._wPhL = new Float32Array(NW);
@@ -174,29 +119,30 @@ class RealtimeEngineMobile extends AudioWorkletProcessor {
     // ── Pre-allocated temp buffers ────────────────────────────────────────────
     this._tmpL = new Float32Array(8192);
     this._tmpR = new Float32Array(8192);
-    // smMCArr pre-allocated and pre-filled with 1.0 (neutral gain).
-    // If lazy-allocated inside process(), first block reads all-zeros → gain=0
-    // for entire first block → click on startup. Pre-filling with 1.0 is safe
-    // because smMixComp starts at 1.0 in the constructor.
-    this._smMCArr = new Float32Array(8192).fill(1.0);
 
-    // ── Param name cache ──────────────────────────────────────────────────────
-    this._pIntensity = COLOR_NAMES.map(c=>`${c}_intensity`);
-    this._pVolume    = COLOR_NAMES.map(c=>`${c}_volume`);
-    this._pBass      = COLOR_NAMES.map(c=>`${c}_bass`);
-    this._pTexture   = COLOR_NAMES.map(c=>`${c}_texture`);
-    this._pWEnabled  = WAVE_NAMES.map(w=>`${w}_enabled`);
-    this._pWCarrier  = WAVE_NAMES.map(w=>`${w}_carrier`);
-    this._pWBeat     = WAVE_NAMES.map(w=>`${w}_beat`);
-    this._pWIntensity= WAVE_NAMES.map(w=>`${w}_intensity`);
+    // ── Per-sample smoothing coefficients ─────────────────────────────────────
+    // All exponential — guarantee continuity across block boundaries.
+    // TC values chosen to be slow enough to never create audible steps
+    // but fast enough to feel responsive.
+    this._kD = 1 - Math.exp(-1/(sr*0.08));   // density ramp   80ms
+    this._kS = 1 - Math.exp(-1/(sr*0.12));   // intensity/vol 120ms
+    this._kR = 1 - Math.exp(-1/(sr*0.03));   // on-ramp        30ms
 
-    // ── Speaker HP filter ─────────────────────────────────────────────────────
+    // ── Parameter name cache ─────────────────────────────────────────────────
+    this._pIntensity  = COLOR_NAMES.map(c=>`${c}_intensity`);
+    this._pVolume     = COLOR_NAMES.map(c=>`${c}_volume`);
+    this._pBass       = COLOR_NAMES.map(c=>`${c}_bass`);
+    this._pTexture    = COLOR_NAMES.map(c=>`${c}_texture`);
+    this._pWEnabled   = WAVE_NAMES.map(w=>`${w}_enabled`);
+    this._pWCarrier   = WAVE_NAMES.map(w=>`${w}_carrier`);
+    this._pWBeat      = WAVE_NAMES.map(w=>`${w}_beat`);
+    this._pWIntensity = WAVE_NAMES.map(w=>`${w}_intensity`);
+
+    // ── Speaker HP filter ────────────────────────────────────────────────────
     this._hpL=0; this._hpR=0;
-    this._hpPrevL=0; this._hpPrevR=0;
     this._hpCoeff=Math.exp(-2*Math.PI*90/sr);
     this._speakerMode=false;
 
-    // ── Port ──────────────────────────────────────────────────────────────────
     this.port.onmessage = (e) => {
       if (e.data.type==='warmup') {
         const n=e.data.samples||4800;
@@ -228,11 +174,11 @@ class RealtimeEngineMobile extends AudioWorkletProcessor {
     }
     for (const w of WAVE_NAMES) {
       p.push(
-        {name:`${w}_enabled`,  defaultValue:0,  minValue:0,maxValue:1},
+        {name:`${w}_enabled`,  defaultValue:0,  minValue:0,  maxValue:1},
         {name:`${w}_carrier`,  defaultValue:200,minValue:100,maxValue:400},
-        {name:`${w}_beat`,     defaultValue:10, minValue:1, maxValue:40},
-        {name:`${w}_intensity`,defaultValue:0.5,minValue:0,maxValue:1},
-        {name:`${w}_melodyVol`,defaultValue:0.7,minValue:0,maxValue:1}
+        {name:`${w}_beat`,     defaultValue:10, minValue:1,  maxValue:40},
+        {name:`${w}_intensity`,defaultValue:0.5,minValue:0,  maxValue:1},
+        {name:`${w}_melodyVol`,defaultValue:0.7,minValue:0,  maxValue:1}
       );
     }
     p.push(
@@ -252,11 +198,10 @@ class RealtimeEngineMobile extends AudioWorkletProcessor {
   }
 
   _rng() {
-    this._rngS = (this._rngS*1664525+1013904223)>>>0;
+    this._rngS=(this._rngS*1664525+1013904223)>>>0;
     return (this._rngS/4294967296)*2-1;
   }
 
-  // ── Noise generators (unchanged from v4) ─────────────────────────────────
   _genWhite() { return (this._rng()*0.82+(this._rng()-this._rng())*0.18)*0.80; }
 
   _genPinkL() {
@@ -336,16 +281,6 @@ class RealtimeEngineMobile extends AudioWorkletProcessor {
     return (st[0]+st[1]+st[2]+st[3])*0.125;
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // SAFE CLAMP — called on every value before it touches audio output
-  // ─────────────────────────────────────────────────────────────────────────
-  _clamp(v) {
-    if (v !== v) return 0;       // NaN
-    if (v > 1.5) return 1.5;
-    if (v < -1.5) return -1.5;
-    return v;
-  }
-
   process(inputs, outputs, parameters) {
     if (!this._ready) {
       this._ready=true;
@@ -357,76 +292,68 @@ class RealtimeEngineMobile extends AudioWorkletProcessor {
     if (!L||!R) return true;
 
     const bs=L.length;
+    const sr=sampleRate;
     L.fill(0); R.fill(0);
 
-    // ── STEP 1: Read param targets ONCE per block (k-rate only, never a-rate)
-    // This is intentional. We deliberately ignore the a-rate param array.
-    // Web Audio's automation timeline on mobile is unreliable — reading
-    // per-sample values causes discontinuities at block boundaries.
-    // We read [0] (the block-start value) as a TARGET and smooth ourselves.
+    // ── Activity check ────────────────────────────────────────────────────────
+    let hasActive=false;
     for (let ci=0; ci<NC; ci++) {
-      this._tgtIntensity[ci] = parameters[this._pIntensity[ci]][0];
-      this._tgtVolume[ci]    = parameters[this._pVolume[ci]][0];
+      if (this._smIntensity[ci]>0.0001 || parameters[this._pIntensity[ci]][0]>0.001) {
+        hasActive=true; break;
+      }
     }
+    if (!hasActive) {
+      for (let wi=0; wi<NW; wi++) {
+        if (parameters[this._pWEnabled[wi]][0]>0.5) { hasActive=true; break; }
+      }
+    }
+    if (!hasActive) return true;
 
-    // ── STEP 2: Count active layers using SMOOTHED values (not raw targets)
-    // This prevents the mix compensation from jumping when a new layer starts.
-    let activeCount = 0;
+    // ── mixComp target — smoothed per-sample inside the mix loop ──────────────
+    let activeCount=0;
     for (let ci=0; ci<NC; ci++) {
-      if (this._smIntensity[ci] > 0.002 || this._tgtIntensity[ci] > 0.001) activeCount++;
+      if (parameters[this._pIntensity[ci]][0]>0.001) activeCount++;
     }
     for (let wi=0; wi<NW; wi++) {
-      if (parameters[this._pWEnabled[wi]][0] > 0.5) activeCount++;
+      if (parameters[this._pWEnabled[wi]][0]>0.5) activeCount++;
     }
-    const targetMixComp = 1 / Math.sqrt(activeCount < 1 ? 1 : activeCount);
+    const targetMixComp = 1/Math.sqrt(activeCount<1?1:activeCount);
     const BASE_GAIN = 1.8;
 
-    const kSlow = this._kSlow;
-    const kMed  = this._kMed;
-    const kFast = this._kFast;
-    const tmpL  = this._tmpL;
-    const tmpR  = this._tmpR;
+    const kD=this._kD, kS=this._kS, kR=this._kR;
+    const tmpL=this._tmpL, tmpR=this._tmpR;
 
-    // ── STEP 3a: Pre-compute smMixComp for every sample in this block ────────
-    // smMixComp must be IDENTICAL across all layers at sample i.
-    // Pre-allocated in constructor filled with 1.0 — no lazy init needed.
-    const smMCArr = this._smMCArr;
+    // smMC runs as ONE continuous variable across all layers in this block.
+    // Writing it back each layer and reading it next layer keeps the curve
+    // unbroken even when multiple layers are active simultaneously.
     let smMC = this._smMixComp;
-    for (let i=0; i<bs; i++) {
-      smMC += (targetMixComp - smMC) * kMed;
-      smMCArr[i] = smMC;
-    }
-    this._smMixComp = smMC;
 
-    // ── STEP 3b: Process each color layer ────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────────────────
+    // COLOR LAYERS
+    // ─────────────────────────────────────────────────────────────────────────
     for (let ci=0; ci<NC; ci++) {
-      const tgtI = this._tgtIntensity[ci];
-      const tgtV = this._tgtVolume[ci];
+      const ipArr  = parameters[this._pIntensity[ci]];
+      const volArr = parameters[this._pVolume[ci]];
 
-      // Skip layers that are truly silent (smIntensity already clamped to exact 0)
-      // AND will remain silent (tgtI below threshold).
-      // We only skip — and only reset filter state — when smIntensity is EXACTLY 0,
-      // meaning the layer has been silent for at least one full block already.
-      // This prevents any mid-fade filter reset which would cause a discontinuity.
-      if (this._smIntensity[ci] === 0 && tgtI < 0.0001) {
-        // Safe to reset filter state here: output was already 0 last block,
-        // so zeroing x1/x2/y1/y2 is a no-op from the signal perspective.
-        const fL0=this._filters[ci*4+0], fL1=this._filters[ci*4+1];
-        const fR0=this._filters[ci*4+2], fR1=this._filters[ci*4+3];
-        fL0.x1=0; fL0.x2=0; fL0.y1=0; fL0.y2=0;
-        fL1.x1=0; fL1.x2=0; fL1.y1=0; fL1.y2=0;
-        fR0.x1=0; fR0.x2=0; fR0.y1=0; fR0.y2=0;
-        fR1.x1=0; fR1.x2=0; fR1.y1=0; fR1.y2=0;
-        this._smOnRamp[ci] = 0;
+      // Skip only when BOTH the live param AND the smoother output are
+      // negligible. The smoother output check prevents cutting a decaying
+      // layer before it reaches true silence — which would be a click.
+      const targetI = ipArr[ipArr.length-1];
+      if (targetI < 0.001 && this._smIntensity[ci] < 0.0001) {
+        // Safe to skip — smoother is already silent. No state reset needed:
+        // densityRamp and onRamp will simply stay near zero and cost nothing
+        // when the layer activates again (smoothers start from their current value).
         continue;
       }
 
       const bass    = parameters[this._pBass[ci]][0];
+      const ipIsAR  = ipArr.length  > 1;
+      const volIsAR = volArr.length > 1;
 
       const fL0=this._filters[ci*4+0], fL1=this._filters[ci*4+1];
       const fR0=this._filters[ci*4+2], fR1=this._filters[ci*4+3];
 
-      // ── Generate block ───────────────────────────────────────────────────
+      // ── 1. Generate raw block ─────────────────────────────────────────────
       switch(ci) {
         case C_WHITE:
           for (let i=0; i<bs; i++) { tmpL[i]=this._genWhite(); tmpR[i]=this._genWhite(); }
@@ -490,85 +417,85 @@ class RealtimeEngineMobile extends AudioWorkletProcessor {
         }
       }
 
-      // ── Biquad passes ─────────────────────────────────────────────────────
+      // ── 2. Spectral shaping — 4 biquad passes ────────────────────────────
       for (let i=0; i<bs; i++) tmpL[i]=fL0.process(tmpL[i]);
       for (let i=0; i<bs; i++) tmpL[i]=fL1.process(tmpL[i]);
       for (let i=0; i<bs; i++) tmpR[i]=fR0.process(tmpR[i]);
       for (let i=0; i<bs; i++) tmpR[i]=fR1.process(tmpR[i]);
 
-      // ── Mix with WORKLET-OWNED sample-by-sample gain smoothing ────────────
-      // CRITICAL: We do NOT use the Web Audio param value here directly.
-      // We smooth from whatever we have toward the target we read above.
-      // This guarantees continuity across ALL block boundaries on ALL devices.
+      // ── 3. Mix — all gain vars advanced sample-by-sample ─────────────────
+      // Local copies of smoother state — avoids array indexing in hot loop.
       let smI  = this._smIntensity[ci];
       let smV  = this._smVolume[ci];
-      let ramp = this._smOnRamp[ci];
+      let dr   = this._densityRamp[ci];
+      let ramp = this._onRamp[ci];
 
       for (let i=0; i<bs; i++) {
-        // Smooth toward targets — slow TC = no clicks ever
-        smI  += (tgtI - smI) * kSlow;
-        smV  += (tgtV - smV) * kSlow;
-        // On-ramp: activates fast, clamp to 1 once close to stop float drift
-        if (ramp < 0.9999) ramp += (1 - ramp) * kFast; else ramp = 1;
+        // Read target — a-rate (automating) or k-rate (constant this block)
+        const tI = ipIsAR  ? ipArr[i]  : ipArr[0];
+        const tV = volIsAR ? volArr[i] : volArr[0];
 
-        // smMixComp read from pre-computed array — same value all layers used
-        let g = smI * smV * BASE_GAIN * smMCArr[i] * ramp;
-        if (g > 4) g = 4; else if (g < 0) g = 0;
+        // All smoothers advance one sample — exponential, continuous, no steps
+        dr   += (tI            - dr)   * kD;
+        smI  += (dr            - smI)  * kS;
+        smV  += (tV            - smV)  * kS;
+        smMC += (targetMixComp - smMC) * kS;
+        ramp += (1             - ramp) * kR;
 
+        const g   = smI * smV * BASE_GAIN * smMC * ramp;
         const mid  = (tmpL[i]+tmpR[i]) * 0.5;
-        const side = (tmpL[i]-tmpR[i]) * 0.4;
+        const side = (tmpL[i]-tmpR[i]) * 0.4; // 0.5 * stereoWidth(0.8)
         L[i] += (mid+side) * g;
         R[i] += (mid-side) * g;
       }
 
-      // Only clamp smIntensity to exact zero when tgtI is also near-zero.
-      // If tgtI > 0 the layer is fading in — preserve the tiny value so
-      // the next block's smoother continues from the correct position.
-      // Clamping to 0 while tgtI > 0 would cause a one-sample jump next block.
-      this._smIntensity[ci] = (smI < 0.0001 && tgtI < 0.0001) ? 0 : smI;
-      // smVolume never goes to 0 on its own (default is 1), safe to clamp always
-      this._smVolume[ci]    = smV < 0.0001 ? 0 : smV;
-      this._smOnRamp[ci]    = ramp;
+      // Write back — next block continues from exactly where we left off
+      this._smIntensity[ci] = smI;
+      this._smVolume[ci]    = smV;
+      this._densityRamp[ci] = dr;
+      this._onRamp[ci]      = ramp;
+      // smMC intentionally NOT written here — continues into next layer's loop
     }
 
-    // ── BRAINWAVES ────────────────────────────────────────────────────────────
-    const sw=parameters['stereoWidth'][0];
-    const TAU=2*Math.PI;
+    // Write smMC back once after all layers
+    this._smMixComp = smMC;
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // BRAINWAVES
+    // ─────────────────────────────────────────────────────────────────────────
+    const sw  = parameters['stereoWidth'][0];
+    const TAU = 2*Math.PI;
 
     for (let wi=0; wi<NW; wi++) {
       if (parameters[this._pWEnabled[wi]][0]<0.5) continue;
 
-      const carrier    = parameters[this._pWCarrier[wi]][0];
-      const beat       = parameters[this._pWBeat[wi]][0];
-      const wIntensity = parameters[this._pWIntensity[wi]][0];
-      const detune     = WAVE_DETUNE[wi];
-      const carrierL   = carrier*Math.pow(2,detune/12);
-      const carrierR   = carrierL*Math.pow(2,beat/(carrierL*12));
-      const stepL      = (TAU*carrierL)/sampleRate;
-      const stepR      = (TAU*carrierR)/sampleRate;
-      const amp        = wIntensity*0.15;
+      const carrier     = parameters[this._pWCarrier[wi]][0];
+      const beat        = parameters[this._pWBeat[wi]][0];
+      const wIntensity  = parameters[this._pWIntensity[wi]][0];
+      const detune      = WAVE_DETUNE[wi];
+      const carrierL    = carrier*Math.pow(2,detune/12);
+      const carrierR    = carrierL*Math.pow(2,beat/(carrierL*12));
+      const stepL       = (TAU*carrierL)/sr;
+      const stepR       = (TAU*carrierR)/sr;
+      const amp         = wIntensity*0.15;
 
       let phL=this._wPhL[wi], phR=this._wPhR[wi];
       for (let i=0; i<bs; i++) {
         phL+=stepL; if(phL>TAU)phL-=TAU;
         phR+=stepR; if(phR>TAU)phR-=TAU;
-        const oscL=Math.sin(phL)*amp;
-        const oscR=Math.sin(phR)*amp;
-        const mid =(oscL+oscR)*0.5;
-        const side=(oscL-oscR)*0.5*sw;
-        L[i]+=mid+side;
-        R[i]+=mid-side;
+        const oscL=Math.sin(phL)*amp, oscR=Math.sin(phR)*amp;
+        const mid=(oscL+oscR)*0.5, side=(oscL-oscR)*0.5*sw;
+        L[i]+=mid+side; R[i]+=mid-side;
       }
       this._wPhL[wi]=phL; this._wPhR[wi]=phR;
     }
 
-    // ── SPEAKER HP FILTER ─────────────────────────────────────────────────────
-    // prevL/prevR MUST persist across blocks — using L[0] causes a discontinuity
-    // on the first sample of every block.
+    // ─────────────────────────────────────────────────────────────────────────
+    // SPEAKER HP FILTER
+    // ─────────────────────────────────────────────────────────────────────────
     if (this._speakerMode) {
       const c=this._hpCoeff;
-      let prevL=this._hpPrevL;
-      let prevR=this._hpPrevR;
+      let prevL=L[0], prevR=R[0];
       for (let i=0; i<bs; i++) {
         const inL=L[i], inR=R[i];
         this._hpL=c*(this._hpL+inL-prevL);
@@ -576,52 +503,24 @@ class RealtimeEngineMobile extends AudioWorkletProcessor {
         prevL=inL; prevR=inR;
         L[i]=this._hpL; R[i]=this._hpR;
       }
-      this._hpPrevL=prevL;
-      this._hpPrevR=prevR;
     }
 
-    // ── FINAL STAGE: DC block + soft limiter + NaN guard ─────────────────────
-    // The DC blocker catches any residual step-function energy (the signature
-    // of a block-boundary gain jump) and removes it from the output.
-    // Even if a click somehow makes it through the smoother, it becomes
-    // a brief sub-audible transient after this filter.
-    // prevOutL/R MUST persist across blocks — resetting to 0 each block
-    // creates a step discontinuity on sample 0 of every block.
-    const dcCoeff = this._dcCoeff;
-    let dcL = this._dcL;
-    let dcR = this._dcR;
-    let prevOutL = this._dcPrevL;
-    let prevOutR = this._dcPrevR;
-
+    // ─────────────────────────────────────────────────────────────────────────
+    // OUTPUT SATURATOR + NaN guard
+    // Branch-free soft knee: f(x) = x / (1 + |x| * 0.4)
+    // This function has no threshold — it is smooth and continuous everywhere.
+    // A conditional limiter (if |x|>threshold) creates a kink in the transfer
+    // curve exactly at the threshold, which produces a click whenever the
+    // signal crosses it. This formulation has zero kinks, zero branches.
+    // At x=0: f(0)=0. At x=1: f(1)≈0.71. At x=2: f(2)≈0.83. Never reaches ±1.
+    // ─────────────────────────────────────────────────────────────────────────
     for (let i=0; i<bs; i++) {
       let l=L[i], r=R[i];
-
-      // NaN/Inf guard
-      if (l!==l || !isFinite(l)) l=0;
-      if (r!==r || !isFinite(r)) r=0;
-
-      // DC block — correct 1-pole HPF: y[n] = x[n] - x[n-1] + coeff*y[n-1]
-      const newDcL = l - prevOutL + dcCoeff * dcL;
-      const newDcR = r - prevOutR + dcCoeff * dcR;
-      prevOutL = l; prevOutR = r;
-      l = newDcL; r = newDcR;
-      dcL = newDcL; dcR = newDcR;
-
-      // Soft limiter — tanh above 0.7 to prevent clipping
-      if (l > 0.7 || l < -0.7) l = Math.tanh(l * 0.85) * 0.98;
-      if (r > 0.7 || r < -0.7) r = Math.tanh(r * 0.85) * 0.98;
-
-      // Hard clip safety — absolute last resort
-      if (l > 1) l = 1; else if (l < -1) l = -1;
-      if (r > 1) r = 1; else if (r < -1) r = -1;
-
-      L[i]=l; R[i]=r;
+      if (l!==l||!isFinite(l)) l=0;
+      if (r!==r||!isFinite(r)) r=0;
+      L[i] = l / (1 + (l<0 ? -l : l) * 0.4);
+      R[i] = r / (1 + (r<0 ? -r : r) * 0.4);
     }
-
-    this._dcL = dcL;
-    this._dcR = dcR;
-    this._dcPrevL = prevOutL;
-    this._dcPrevR = prevOutR;
 
     return true;
   }
