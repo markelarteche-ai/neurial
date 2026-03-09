@@ -111,6 +111,9 @@ class RealtimeEngineMobile extends AudioWorkletProcessor {
       this._filters[ci*4+3].setHS(hf,sr,hg);
     }
 
+    // ── Smoothed mix compensation (avoids click when layer count changes) ────
+    this._smMixComp = 1.0;
+
     // ── Per-layer smoothed gain state ────────────────────────────────────────
     // All updated SAMPLE BY SAMPLE inside the mix loop — never block-level jumps.
     this._smIntensity = new Float32Array(NC);   // double-smoothed intensity
@@ -320,7 +323,9 @@ class RealtimeEngineMobile extends AudioWorkletProcessor {
     }
     if (!hasActive) return true;
 
-    // ── Mix compensation ──────────────────────────────────────────────────────
+    // ── Mix compensation target (smoothed below, inside mix loop) ────────────
+    // Computing a scalar mixComp and applying it instantly causes a click
+    // every time a layer is added/removed. We smooth it sample-by-sample instead.
     let activeCount=0;
     for (let ci=0; ci<NC; ci++) {
       if (parameters[this._pIntensity[ci]][0]>0.001) activeCount++;
@@ -328,11 +333,16 @@ class RealtimeEngineMobile extends AudioWorkletProcessor {
     for (let wi=0; wi<NW; wi++) {
       if (parameters[this._pWEnabled[wi]][0]>0.5) activeCount++;
     }
-    const mixComp=1/Math.sqrt(activeCount<1?1:activeCount);
+    const targetMixComp = 1/Math.sqrt(activeCount<1?1:activeCount);
     const BASE_GAIN=1.8;
 
     const kD=this._kD, kS=this._kS, kR=this._kR;
     const tmpL=this._tmpL, tmpR=this._tmpR;
+
+    // smMixComp advances continuously through all layers this block
+    // It must be read/written as a single running state, not per-layer.
+    // We handle it outside the layer loop.
+    let smMC = this._smMixComp;
 
     // ─────────────────────────────────────────────────────────────────────────
     // COLOR LAYERS
@@ -437,31 +447,34 @@ class RealtimeEngineMobile extends AudioWorkletProcessor {
       let smV  = this._smVolume[ci];
       let dr   = this._densityRamp[ci];
       let ramp = this._onRamp[ci];
+      // smMC comes from outer scope — continuous across all layers
 
       for (let i=0; i<bs; i++) {
-        // Read target values — use a-rate array per sample if param is automating
         const tI = ipIsAR  ? ipArr[i]  : ipArr[0];
         const tV = volIsAR ? volArr[i] : volArr[0];
 
-        // Advance smoothers one sample
-        dr   += (tI  - dr)  * kD;
-        smI  += (dr  - smI) * kS;
-        smV  += (tV  - smV) * kS;
-        ramp += (1   - ramp) * kR;
+        dr   += (tI            - dr)  * kD;
+        smI  += (dr            - smI) * kS;
+        smV  += (tV            - smV) * kS;
+        smMC += (targetMixComp - smMC) * kS;
+        ramp += (1             - ramp) * kR;
 
-        const g = smI * smV * BASE_GAIN * mixComp * ramp;
+        const g = smI * smV * BASE_GAIN * smMC * ramp;
         const mid  = (tmpL[i]+tmpR[i]) * 0.5;
-        const side = (tmpL[i]-tmpR[i]) * 0.4; // 0.5 * stereoWidth(0.8)
+        const side = (tmpL[i]-tmpR[i]) * 0.4;
         L[i] += (mid+side) * g;
         R[i] += (mid-side) * g;
       }
 
-      // Save smoothed state back — next block continues the curve from here
       this._smIntensity[ci] = smI;
       this._smVolume[ci]    = smV;
       this._densityRamp[ci] = dr;
       this._onRamp[ci]      = ramp;
+      // smMC NOT written here — continues into next layer
     }
+
+    // Persist smoothed mixComp for next block
+    this._smMixComp = smMC;
 
     // ─────────────────────────────────────────────────────────────────────────
     // BRAINWAVES
