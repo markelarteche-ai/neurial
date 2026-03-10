@@ -1,9 +1,15 @@
-// REALTIME AUDIO ENGINE — MOBILE WORKLET v5.0 + DIAG
-// DSP idéntico al v5.0 original. Solo añade medición de:
-//   GAP     → scheduler del sistema retrasó el bloque (underrun de OS)
-//   DSP_JUMP → salto brusco de amplitud entre bloques (discontinuidad DSP)
-// Activar desde App.jsx: engine.port.postMessage({ type: 'diagStart' })
-// Leer resultados: engine.port.onmessage → e.data.type === 'diagReport'
+// REALTIME AUDIO ENGINE — MOBILE WORKLET v5.0
+// ─────────────────────────────────────────────────────────────────────────────
+// Anti-click design — every source of discontinuity eliminated:
+//
+//   1. ALL gain changes sample-by-sample — no block-level jumps ever.
+//   2. mixComp smoothed sample-by-sample across ALL layers in one running var.
+//   3. Inactive layers: NO instant reset. _densityRamp and _onRamp decay
+//      naturally through the same smoothers — zero abrupt state changes.
+//   4. Output saturator is branch-free: x/(1+|x|*k) — no threshold crossing.
+//   5. Zero allocations in process(). All buffers pre-allocated.
+//   6. a-rate params read per-sample when slider is moving.
+//   7. Biquad NaN clip extended to ±8 to avoid false-zeroing loud transients.
 // ─────────────────────────────────────────────────────────────────────────────
 
 class Biquad {
@@ -66,6 +72,9 @@ class RealtimeEngineMobile extends AudioWorkletProcessor {
     this._brownL=this._rng()*0.001; this._brownR=this._rng()*0.001;
     this._brownDampL=0; this._brownDampR=0;
     this._blackDampL=0; this._blackDampR=0;
+    this._brownDampL=0; this._brownDampR=0;
+this._blackDampL=0; this._blackDampR=0;
+this._blackL=this._rng()*0.001; this._blackR=this._rng()*0.001;
     this._greyL=0; this._greyR=0;
     this._blueLastL=this._rng()*0.001; this._blueLastR=this._rng()*0.001;
     this._violetLast=this._rng()*0.001;
@@ -76,7 +85,7 @@ class RealtimeEngineMobile extends AudioWorkletProcessor {
     this._greenBreath=Math.random()*Math.PI*2;
     this._greenFillL=0; this._greenFillR=0;
 
-    // ── Biquad filters ───────────────────────────────────────────────────────
+    // ── Biquad filters — layout: [ci*4+0]=L_ls, [+1]=L_hs, [+2]=R_ls, [+3]=R_hs
     this._filters = [];
     for (let i=0; i<NC*4; i++) this._filters.push(new Biquad());
     const CFG = [
@@ -97,7 +106,7 @@ class RealtimeEngineMobile extends AudioWorkletProcessor {
       this._filters[ci*4+3].setHS(hf,sr,hg);
     }
 
-    // ── Per-layer gain smoothers ──────────────────────────────────────────────
+    // ── Per-layer gain smoothers — NEVER reset instantaneously ───────────────
     this._smIntensity = new Float32Array(NC);
     this._smVolume    = new Float32Array(NC).fill(1);
     this._densityRamp = new Float32Array(NC);
@@ -115,11 +124,14 @@ class RealtimeEngineMobile extends AudioWorkletProcessor {
     this._tmpR = new Float32Array(8192);
 
     // ── Per-sample smoothing coefficients ─────────────────────────────────────
-    this._kD = 1 - Math.exp(-1/(sr*0.08));
-    this._kS = 1 - Math.exp(-1/(sr*0.12));
-    this._kR = 1 - Math.exp(-1/(sr*0.03));
+    // All exponential — guarantee continuity across block boundaries.
+    // TC values chosen to be slow enough to never create audible steps
+    // but fast enough to feel responsive.
+    this._kD = 1 - Math.exp(-1/(sr*0.08));   // density ramp   80ms
+    this._kS = 1 - Math.exp(-1/(sr*0.12));   // intensity/vol 120ms
+    this._kR = 1 - Math.exp(-1/(sr*0.03));   // on-ramp        30ms
 
-    // ── Parameter name cache ──────────────────────────────────────────────────
+    // ── Parameter name cache ─────────────────────────────────────────────────
     this._pIntensity  = COLOR_NAMES.map(c=>`${c}_intensity`);
     this._pVolume     = COLOR_NAMES.map(c=>`${c}_volume`);
     this._pBass       = COLOR_NAMES.map(c=>`${c}_bass`);
@@ -133,14 +145,6 @@ class RealtimeEngineMobile extends AudioWorkletProcessor {
     this._hpL=0; this._hpR=0;
     this._hpCoeff=Math.exp(-2*Math.PI*90/sr);
     this._speakerMode=false;
-
-    // ── DIAGNÓSTICO ──────────────────────────────────────────────────────────
-    this._diagEnabled    = false;
-    this._diagLastTime   = 0;
-    this._diagLastL      = 0;
-    this._diagBlockSize  = 0;
-    this._diagCount      = 0;
-    this._diagLog        = [];
 
     this.port.onmessage = (e) => {
       if (e.data.type==='warmup') {
@@ -157,19 +161,6 @@ class RealtimeEngineMobile extends AudioWorkletProcessor {
         }
       } else if (e.data.type==='speakerMode') {
         this._speakerMode=!!e.data.active;
-      } else if (e.data.type==='diagStart') {
-        this._diagEnabled  = true;
-        this._diagLastTime = 0;
-        this._diagLastL    = 0;
-        this._diagCount    = 0;
-        this._diagLog      = [];
-        this.port.postMessage({ type:'diagAck' });
-      } else if (e.data.type==='diagStop') {
-        this._diagEnabled = false;
-        if (this._diagLog.length > 0) {
-          this.port.postMessage({ type:'diagReport', events: this._diagLog.splice(0) });
-        }
-        this.port.postMessage({ type:'diagDone', blocks: this._diagCount });
       }
     };
   }
@@ -270,15 +261,15 @@ class RealtimeEngineMobile extends AudioWorkletProcessor {
   }
 
   _genBlackL() {
-    this._brownL+=(this._rng()*0.01); this._brownL*=0.992;
-    if(this._brownL>1)this._brownL=1; else if(this._brownL<-1)this._brownL=-1;
-    return this._brownL*0.42;
-  }
-  _genBlackR() {
-    this._brownR+=(this._rng()*0.01); this._brownR*=0.992;
-    if(this._brownR>1)this._brownR=1; else if(this._brownR<-1)this._brownR=-1;
-    return this._brownR*0.42;
-  }
+  this._blackL+=(this._rng()*0.01); this._blackL*=0.992;
+  if(this._blackL>1)this._blackL=1; else if(this._blackL<-1)this._blackL=-1;
+  return this._blackL*0.42;
+}
+_genBlackR() {
+  this._blackR+=(this._rng()*0.01); this._blackR*=0.992;
+  if(this._blackR>1)this._blackR=1; else if(this._blackR<-1)this._blackR=-1;
+  return this._blackR*0.42;
+}
 
   _genGreenL() {
     const st=this._greenL, w=this._rng();
@@ -305,34 +296,6 @@ class RealtimeEngineMobile extends AudioWorkletProcessor {
 
     const bs=L.length;
     const sr=sampleRate;
-
-    // ── DIAGNÓSTICO — INICIO DEL BLOQUE ──────────────────────────────────────
-    // Detecta GAP: el scheduler del OS retrasó este bloque más de lo esperado.
-    // bs/sr es el gap exacto entre bloques. Si actual > expected + 2ms = underrun.
-    const diagOn = this._diagEnabled;
-    if (diagOn) {
-      this._diagCount++;
-      const now = currentTime;
-      if (this._diagLastTime > 0) {
-        const expected = this._diagBlockSize / sr;
-        const actual   = now - this._diagLastTime;
-        const err      = actual - expected;
-        if (err > 0.002) {
-          this._diagLog.push({ t:'GAP', block:this._diagCount,
-            errMs: Math.round(err*1000), expMs: Math.round(expected*1000),
-            actMs: Math.round(actual*1000), at: Math.round(now*1000) });
-        }
-      }
-      this._diagLastTime  = now;
-      this._diagBlockSize = bs;
-if (this._diagCount === 1) {
-  this.port.postMessage({ type:'diagInfo', sampleRate, blockSize: bs });
-}
-if (this._diagCount % 50 === 0 && this._diagLog.length > 0) {        this.port.postMessage({ type:'diagReport', events: this._diagLog.splice(0) });
-      }
-    }
-    // ─────────────────────────────────────────────────────────────────────────
-
     L.fill(0); R.fill(0);
 
     // ── Activity check ────────────────────────────────────────────────────────
@@ -349,7 +312,7 @@ if (this._diagCount % 50 === 0 && this._diagLog.length > 0) {        this.port.p
     }
     if (!hasActive) return true;
 
-    // ── mixComp ───────────────────────────────────────────────────────────────
+    // ── mixComp target — smoothed per-sample inside the mix loop ──────────────
     let activeCount=0;
     for (let ci=0; ci<NC; ci++) {
       if (parameters[this._pIntensity[ci]][0]>0.001) activeCount++;
@@ -362,6 +325,10 @@ if (this._diagCount % 50 === 0 && this._diagLog.length > 0) {        this.port.p
 
     const kD=this._kD, kS=this._kS, kR=this._kR;
     const tmpL=this._tmpL, tmpR=this._tmpR;
+
+    // smMC runs as ONE continuous variable across all layers in this block.
+    // Writing it back each layer and reading it next layer keeps the curve
+    // unbroken even when multiple layers are active simultaneously.
     let smMC = this._smMixComp;
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -371,8 +338,14 @@ if (this._diagCount % 50 === 0 && this._diagLog.length > 0) {        this.port.p
       const ipArr  = parameters[this._pIntensity[ci]];
       const volArr = parameters[this._pVolume[ci]];
 
+      // Skip only when BOTH the live param AND the smoother output are
+      // negligible. The smoother output check prevents cutting a decaying
+      // layer before it reaches true silence — which would be a click.
       const targetI = ipArr[ipArr.length-1];
       if (targetI < 0.001 && this._smIntensity[ci] < 0.0001) {
+        // Safe to skip — smoother is already silent. No state reset needed:
+        // densityRamp and onRamp will simply stay near zero and cost nothing
+        // when the layer activates again (smoothers start from their current value).
         continue;
       }
 
@@ -447,41 +420,47 @@ if (this._diagCount % 50 === 0 && this._diagLog.length > 0) {        this.port.p
         }
       }
 
-      // ── 2. Spectral shaping ───────────────────────────────────────────────
+      // ── 2. Spectral shaping — 4 biquad passes ────────────────────────────
       for (let i=0; i<bs; i++) tmpL[i]=fL0.process(tmpL[i]);
       for (let i=0; i<bs; i++) tmpL[i]=fL1.process(tmpL[i]);
       for (let i=0; i<bs; i++) tmpR[i]=fR0.process(tmpR[i]);
       for (let i=0; i<bs; i++) tmpR[i]=fR1.process(tmpR[i]);
 
-      // ── 3. Mix — per-sample ───────────────────────────────────────────────
+      // ── 3. Mix — all gain vars advanced sample-by-sample ─────────────────
+      // Local copies of smoother state — avoids array indexing in hot loop.
       let smI  = this._smIntensity[ci];
       let smV  = this._smVolume[ci];
       let dr   = this._densityRamp[ci];
       let ramp = this._onRamp[ci];
 
       for (let i=0; i<bs; i++) {
+        // Read target — a-rate (automating) or k-rate (constant this block)
         const tI = ipIsAR  ? ipArr[i]  : ipArr[0];
         const tV = volIsAR ? volArr[i] : volArr[0];
 
+        // All smoothers advance one sample — exponential, continuous, no steps
         dr   += (tI            - dr)   * kD;
         smI  += (dr            - smI)  * kS;
         smV  += (tV            - smV)  * kS;
         smMC += (targetMixComp - smMC) * kS;
         ramp += (1             - ramp) * kR;
 
-        const g    = smI * smV * BASE_GAIN * smMC * ramp;
+        const g   = smI * smV * BASE_GAIN * smMC * ramp;
         const mid  = (tmpL[i]+tmpR[i]) * 0.5;
-        const side = (tmpL[i]-tmpR[i]) * 0.4;
+        const side = (tmpL[i]-tmpR[i]) * 0.4; // 0.5 * stereoWidth(0.8)
         L[i] += (mid+side) * g;
         R[i] += (mid-side) * g;
       }
 
+      // Write back — next block continues from exactly where we left off
       this._smIntensity[ci] = smI;
       this._smVolume[ci]    = smV;
       this._densityRamp[ci] = dr;
       this._onRamp[ci]      = ramp;
+      // smMC intentionally NOT written here — continues into next layer's loop
     }
 
+    // Write smMC back once after all layers
     this._smMixComp = smMC;
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -531,6 +510,12 @@ if (this._diagCount % 50 === 0 && this._diagLog.length > 0) {        this.port.p
 
     // ─────────────────────────────────────────────────────────────────────────
     // OUTPUT SATURATOR + NaN guard
+    // Branch-free soft knee: f(x) = x / (1 + |x| * 0.4)
+    // This function has no threshold — it is smooth and continuous everywhere.
+    // A conditional limiter (if |x|>threshold) creates a kink in the transfer
+    // curve exactly at the threshold, which produces a click whenever the
+    // signal crosses it. This formulation has zero kinks, zero branches.
+    // At x=0: f(0)=0. At x=1: f(1)≈0.71. At x=2: f(2)≈0.83. Never reaches ±1.
     // ─────────────────────────────────────────────────────────────────────────
     for (let i=0; i<bs; i++) {
       let l=L[i], r=R[i];
@@ -539,29 +524,6 @@ if (this._diagCount % 50 === 0 && this._diagLog.length > 0) {        this.port.p
       L[i] = l / (1 + (l<0 ? -l : l) * 0.4);
       R[i] = r / (1 + (r<0 ? -r : r) * 0.4);
     }
-
-    // ── DIAGNÓSTICO — FIN DEL BLOQUE ─────────────────────────────────────────
-    // Detecta DSP_JUMP: salto brusco de amplitud entre el último sample del
-    // bloque anterior y el actual. Indica discontinuidad interna del DSP.
-    if (diagOn && bs > 0) {
-      const lastL = L[bs-1];
-      const jump  = lastL - this._diagLastL;
-      const absJump = jump < 0 ? -jump : jump;
-      // Solo reportar si había señal activa (evita falsos positivos en silencio)
-      let anyActive = false;
-      for (let ci=0; ci<NC; ci++) {
-        if (this._smIntensity[ci] > 0.01) { anyActive = true; break; }
-      }
-      if (anyActive && absJump > 0.15) {
-        this._diagLog.push({ t:'DSP_JUMP', block:this._diagCount,
-          prevL: Math.round(this._diagLastL*1000)/1000,
-          nowL:  Math.round(lastL*1000)/1000,
-          jump:  Math.round(absJump*1000)/1000,
-          at:    Math.round(currentTime*1000) });
-      }
-      this._diagLastL = lastL;
-    }
-    // ─────────────────────────────────────────────────────────────────────────
 
     return true;
   }
