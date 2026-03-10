@@ -3,7 +3,7 @@ import ReactDOM from 'react-dom/client';
 import './index.css';
 import './App.css';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import App from "./App";
+import App from "./Router";
 import LoginScreen from './LoginScreen';
 
 // Root wrapper — decides what to show
@@ -34,7 +34,7 @@ const Root = () => {
     return <LoginScreen />;
   }
 
-  return <App />;
+  return <Router />;
 };
 
 ReactDOM.createRoot(document.getElementById('root')).render(
