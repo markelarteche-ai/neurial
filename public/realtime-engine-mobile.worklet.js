@@ -1,15 +1,15 @@
-// REALTIME AUDIO ENGINE — MOBILE WORKLET v5.0
+// REALTIME AUDIO ENGINE — MOBILE WORKLET v6.0
 // ─────────────────────────────────────────────────────────────────────────────
-// Anti-click design — every source of discontinuity eliminated:
+// Diseñado específicamente para móvil. Principios de diseño:
 //
-//   1. ALL gain changes sample-by-sample — no block-level jumps ever.
-//   2. mixComp smoothed sample-by-sample across ALL layers in one running var.
-//   3. Inactive layers: NO instant reset. _densityRamp and _onRamp decay
-//      naturally through the same smoothers — zero abrupt state changes.
-//   4. Output saturator is branch-free: x/(1+|x|*k) — no threshold crossing.
-//   5. Zero allocations in process(). All buffers pre-allocated.
-//   6. a-rate params read per-sample when slider is moving.
-//   7. Biquad NaN clip extended to ±8 to avoid false-zeroing loud transients.
+//  1. CERO hard clips en ningún generador — todo usa soft saturation x/(1+|x|)
+//  2. Cada color tiene estado 100% independiente — ningún generador toca
+//     variables de otro (bug brown/black eliminado estructuralmente)
+//  3. Grey no llama a _genPink internamente — usa su propio filtro IIR
+//  4. Todos los smoothers son exponenciales y continuos entre bloques
+//  5. Sin allocations en process() — todos los buffers pre-allocados
+//  6. Block size variable soportado (128 a 8192) — móvil usa bloques grandes
+//  7. Sin diagnóstico — cero overhead
 // ─────────────────────────────────────────────────────────────────────────────
 
 class Biquad {
@@ -23,7 +23,11 @@ class Biquad {
                         - this.a1*this.y1  - this.a2*this.y2;
     this.x2=this.x1; this.x1=x;
     this.y2=this.y1; this.y1=y;
-    return (y===y && y<8 && y>-8) ? y : 0;
+    if (y!==y || y>8 || y<-8) {
+      this.x1=0; this.x2=0; this.y1=0; this.y2=0;
+      return 0;
+    }
+    return y;
   }
   setLS(freq, sr, gainDB) {
     const A=Math.pow(10,gainDB/40);
@@ -47,6 +51,12 @@ class Biquad {
   }
 }
 
+// Soft saturator continuo — f(x) = x/(1+|x|)
+// Nunca produce discontinuidades. Derivada siempre positiva y acotada.
+function softClip(x) {
+  return x / (1 + (x < 0 ? -x : x));
+}
+
 const C_WHITE=0, C_PINK=1, C_BROWN=2, C_GREY=3,
       C_BLUE=4,  C_VIOLET=5, C_BLACK=6, C_GREEN=7;
 const NC = 8;
@@ -65,27 +75,41 @@ class RealtimeEngineMobile extends AudioWorkletProcessor {
     this._rngS = 0x12345678;
     for (let i=0; i<10000; i++) this._rng();
 
-    // ── Noise state ──────────────────────────────────────────────────────────
+    // ── Estado de cada generador — COMPLETAMENTE INDEPENDIENTES ──────────────
+
+    // WHITE — stateless
+
+    // PINK — estado propio L y R
     this._pinkL = new Float32Array(7);
     this._pinkR = new Float32Array(7);
-    for (let i=0; i<7; i++) { this._pinkL[i]=this._rng()*0.001; this._pinkR[i]=this._rng()*0.001; }
-    this._brownL=this._rng()*0.001; this._brownR=this._rng()*0.001;
-    this._brownDampL=0; this._brownDampR=0;
-    this._blackDampL=0; this._blackDampR=0;
-    this._brownDampL=0; this._brownDampR=0;
-this._blackDampL=0; this._blackDampR=0;
-this._blackL=this._rng()*0.001; this._blackR=this._rng()*0.001;
-    this._greyL=0; this._greyR=0;
-    this._blueLastL=this._rng()*0.001; this._blueLastR=this._rng()*0.001;
-    this._violetLast=this._rng()*0.001;
-    this._greenL=new Float32Array(4); this._greenR=new Float32Array(4);
-    for (let i=0; i<4; i++) { this._greenL[i]=this._rng()*0.001; this._greenR[i]=this._rng()*0.001; }
-    this._greenGrainL=0; this._greenGrainR=0;
-    this._greenGrainLPL=0; this._greenGrainLPR=0;
-    this._greenBreath=Math.random()*Math.PI*2;
-    this._greenFillL=0; this._greenFillR=0;
 
-    // ── Biquad filters — layout: [ci*4+0]=L_ls, [+1]=L_hs, [+2]=R_ls, [+3]=R_hs
+    // BROWN — random walk con soft clip, estado propio L y R
+    this._brownL = 0; this._brownR = 0;
+    this._brownDampL = 0; this._brownDampR = 0;
+
+    // GREY — filtro IIR propio, NO comparte nada con pink
+    this._greyL0 = 0; this._greyL1 = 0;
+    this._greyR0 = 0; this._greyR1 = 0;
+
+    // BLUE — diferenciador, estado propio L y R
+    this._blueLastL = 0; this._blueLastR = 0;
+
+    // VIOLET — diferenciador orden 1
+    this._violetLast = 0;
+
+    // BLACK — random walk COMPLETAMENTE SEPARADO de brown
+    this._blackL = 0; this._blackR = 0;
+    this._blackDampL = 0; this._blackDampR = 0;
+
+    // GREEN — filtro resonante de 4 estados, L y R independientes
+    this._greenL = new Float32Array(4);
+    this._greenR = new Float32Array(4);
+    this._greenGrainL = 0; this._greenGrainR = 0;
+    this._greenGrainLPL = 0; this._greenGrainLPR = 0;
+    this._greenBreath = Math.random() * Math.PI * 2;
+    this._greenFillL = 0; this._greenFillR = 0;
+
+    // ── Biquad filters ───────────────────────────────────────────────────────
     this._filters = [];
     for (let i=0; i<NC*4; i++) this._filters.push(new Biquad());
     const CFG = [
@@ -106,32 +130,27 @@ this._blackL=this._rng()*0.001; this._blackR=this._rng()*0.001;
       this._filters[ci*4+3].setHS(hf,sr,hg);
     }
 
-    // ── Per-layer gain smoothers — NEVER reset instantaneously ───────────────
+    // ── Smoothers de ganancia ─────────────────────────────────────────────────
     this._smIntensity = new Float32Array(NC);
     this._smVolume    = new Float32Array(NC).fill(1);
     this._densityRamp = new Float32Array(NC);
     this._onRamp      = new Float32Array(NC);
+    this._smMixComp   = 1.0;
 
-    // ── Smoothed mix compensation ─────────────────────────────────────────────
-    this._smMixComp = 1.0;
-
-    // ── Brainwave phases ──────────────────────────────────────────────────────
+    // ── Fases de brainwaves ───────────────────────────────────────────────────
     this._wPhL = new Float32Array(NW);
     this._wPhR = new Float32Array(NW);
 
-    // ── Pre-allocated temp buffers ────────────────────────────────────────────
+    // ── Buffers pre-allocados — 8192 cubre cualquier block size en móvil ─────
     this._tmpL = new Float32Array(8192);
     this._tmpR = new Float32Array(8192);
 
-    // ── Per-sample smoothing coefficients ─────────────────────────────────────
-    // All exponential — guarantee continuity across block boundaries.
-    // TC values chosen to be slow enough to never create audible steps
-    // but fast enough to feel responsive.
-    this._kD = 1 - Math.exp(-1/(sr*0.08));   // density ramp   80ms
-    this._kS = 1 - Math.exp(-1/(sr*0.12));   // intensity/vol 120ms
-    this._kR = 1 - Math.exp(-1/(sr*0.03));   // on-ramp        30ms
+    // ── Coeficientes de smoothing exponencial ─────────────────────────────────
+    this._kD = 1 - Math.exp(-1/(sr*0.08));
+    this._kS = 1 - Math.exp(-1/(sr*0.12));
+    this._kR = 1 - Math.exp(-1/(sr*0.03));
 
-    // ── Parameter name cache ─────────────────────────────────────────────────
+    // ── Cache de nombres de parámetros ───────────────────────────────────────
     this._pIntensity  = COLOR_NAMES.map(c=>`${c}_intensity`);
     this._pVolume     = COLOR_NAMES.map(c=>`${c}_volume`);
     this._pBass       = COLOR_NAMES.map(c=>`${c}_bass`);
@@ -148,7 +167,7 @@ this._blackL=this._rng()*0.001; this._blackR=this._rng()*0.001;
 
     this.port.onmessage = (e) => {
       if (e.data.type==='warmup') {
-        const n=e.data.samples||4800;
+        const n=e.data.samples||8192;
         for (let i=0; i<n; i++) {
           this._genWhite();
           this._genPinkL(); this._genPinkR();
@@ -205,7 +224,9 @@ this._blackL=this._rng()*0.001; this._blackR=this._rng()*0.001;
     return (this._rngS/4294967296)*2-1;
   }
 
-  _genWhite() { return (this._rng()*0.82+(this._rng()-this._rng())*0.18)*0.80; }
+  _genWhite() {
+    return (this._rng()*0.82+(this._rng()-this._rng())*0.18)*0.80;
+  }
 
   _genPinkL() {
     const st=this._pinkL, w=this._rng();
@@ -213,7 +234,8 @@ this._blackL=this._rng()*0.001; this._blackR=this._rng()*0.001;
     st[2]=0.96900*st[2]+w*0.1538520; st[3]=0.86650*st[3]+w*0.3104856;
     st[4]=0.55000*st[4]+w*0.5329522; st[5]=-0.7616*st[5]-w*0.0168980;
     const out=st[0]+st[1]+st[2]+st[3]+st[4]+st[5]+st[6]+w*0.5362;
-    st[6]=w*0.115926; return out*0.05;
+    st[6]=w*0.115926;
+    return out*0.05;
   }
   _genPinkR() {
     const st=this._pinkR, w=this._rng();
@@ -221,56 +243,72 @@ this._blackL=this._rng()*0.001; this._blackR=this._rng()*0.001;
     st[2]=0.96900*st[2]+w*0.1538520; st[3]=0.86650*st[3]+w*0.3104856;
     st[4]=0.55000*st[4]+w*0.5329522; st[5]=-0.7616*st[5]-w*0.0168980;
     const out=st[0]+st[1]+st[2]+st[3]+st[4]+st[5]+st[6]+w*0.5362;
-    st[6]=w*0.115926; return out*0.05;
+    st[6]=w*0.115926;
+    return out*0.05;
   }
 
+  // BROWN — soft clip, sin hard clip nunca
   _genBrownL() {
-  this._brownL+=(this._rng()*0.01); this._brownL*=0.992;
-  this._brownL = this._brownL / (1 + (this._brownL < 0 ? -this._brownL : this._brownL));
-  return this._brownL*0.6;
-}
-_genBrownR() {
-  this._brownR+=(this._rng()*0.01); this._brownR*=0.992;
-  this._brownR = this._brownR / (1 + (this._brownR < 0 ? -this._brownR : this._brownR));
-  return this._brownR*0.6;
-}
+    this._brownL += this._rng() * 0.012;
+    this._brownL *= 0.992;
+    this._brownL = softClip(this._brownL);
+    return this._brownL * 0.65;
+  }
+  _genBrownR() {
+    this._brownR += this._rng() * 0.012;
+    this._brownR *= 0.992;
+    this._brownR = softClip(this._brownR);
+    return this._brownR * 0.65;
+  }
 
+  // GREY — filtro IIR propio, nunca llama a _genPinkL/R
   _genGreyL() {
-    const w=this._rng(), p=this._genPinkL()*0.18;
-    this._greyL=this._greyL*0.82+(w*0.62+p)*0.18;
-    return this._greyL*0.24;
+    const w = this._rng();
+    this._greyL0 = this._greyL0 * 0.95 + w * 0.05;
+    this._greyL1 = this._greyL1 * 0.80 + w * 0.20;
+    return softClip(w * 0.5 + this._greyL0 * 0.3 + this._greyL1 * 0.2) * 0.35;
   }
   _genGreyR() {
-    const w=this._rng(), p=this._genPinkR()*0.18;
-    this._greyR=this._greyR*0.82+(w*0.62+p)*0.18;
-    return this._greyR*0.24;
+    const w = this._rng();
+    this._greyR0 = this._greyR0 * 0.95 + w * 0.05;
+    this._greyR1 = this._greyR1 * 0.80 + w * 0.20;
+    return softClip(w * 0.5 + this._greyR0 * 0.3 + this._greyR1 * 0.2) * 0.35;
   }
 
+  // BLUE — diferenciador con soft clip
   _genBlueL() {
     const w=this._rng(), d=(w-this._blueLastL)*2.5;
-    this._blueLastL=w; return d*0.62;
+    this._blueLastL=w;
+    return softClip(d) * 0.62;
   }
   _genBlueR() {
     const w=this._rng(), d=(w-this._blueLastR)*2.5;
-    this._blueLastR=w; return d*0.62;
+    this._blueLastR=w;
+    return softClip(d) * 0.62;
   }
 
+  // VIOLET
   _genViolet() {
     const w=this._rng(), v=w-0.5*this._violetLast;
-    this._violetLast=w; return v*0.60;
+    this._violetLast=w;
+    return softClip(v) * 0.60;
   }
 
+  // BLACK — estado completamente independiente de brown
   _genBlackL() {
-  this._blackL+=(this._rng()*0.01); this._blackL*=0.992;
-  this._blackL = this._blackL / (1 + (this._blackL < 0 ? -this._blackL : this._blackL));
-  return this._blackL*0.42;
-}
-_genBlackR() {
-  this._blackR+=(this._rng()*0.01); this._blackR*=0.992;
-  this._blackR = this._blackR / (1 + (this._blackR < 0 ? -this._blackR : this._blackR));
-  return this._blackR*0.42;
-}
+    this._blackL += this._rng() * 0.008;
+    this._blackL *= 0.994;
+    this._blackL = softClip(this._blackL);
+    return this._blackL * 0.42;
+  }
+  _genBlackR() {
+    this._blackR += this._rng() * 0.008;
+    this._blackR *= 0.994;
+    this._blackR = softClip(this._blackR);
+    return this._blackR * 0.42;
+  }
 
+  // GREEN
   _genGreenL() {
     const st=this._greenL, w=this._rng();
     st[0]=0.9850*st[0]+w*0.1950; st[1]=0.9650*st[1]+w*0.2350;
@@ -298,7 +336,7 @@ _genBlackR() {
     const sr=sampleRate;
     L.fill(0); R.fill(0);
 
-    // ── Activity check ────────────────────────────────────────────────────────
+    // Activity check
     let hasActive=false;
     for (let ci=0; ci<NC; ci++) {
       if (this._smIntensity[ci]>0.0001 || parameters[this._pIntensity[ci]][0]>0.001) {
@@ -312,7 +350,7 @@ _genBlackR() {
     }
     if (!hasActive) return true;
 
-    // ── mixComp target — smoothed per-sample inside the mix loop ──────────────
+    // Mix compensation
     let activeCount=0;
     for (let ci=0; ci<NC; ci++) {
       if (parameters[this._pIntensity[ci]][0]>0.001) activeCount++;
@@ -325,29 +363,15 @@ _genBlackR() {
 
     const kD=this._kD, kS=this._kS, kR=this._kR;
     const tmpL=this._tmpL, tmpR=this._tmpR;
-
-    // smMC runs as ONE continuous variable across all layers in this block.
-    // Writing it back each layer and reading it next layer keeps the curve
-    // unbroken even when multiple layers are active simultaneously.
     let smMC = this._smMixComp;
 
-    // ─────────────────────────────────────────────────────────────────────────
     // COLOR LAYERS
-    // ─────────────────────────────────────────────────────────────────────────
     for (let ci=0; ci<NC; ci++) {
       const ipArr  = parameters[this._pIntensity[ci]];
       const volArr = parameters[this._pVolume[ci]];
 
-      // Skip only when BOTH the live param AND the smoother output are
-      // negligible. The smoother output check prevents cutting a decaying
-      // layer before it reaches true silence — which would be a click.
       const targetI = ipArr[ipArr.length-1];
-      if (targetI < 0.001 && this._smIntensity[ci] < 0.0001) {
-        // Safe to skip — smoother is already silent. No state reset needed:
-        // densityRamp and onRamp will simply stay near zero and cost nothing
-        // when the layer activates again (smoothers start from their current value).
-        continue;
-      }
+      if (targetI < 0.001 && this._smIntensity[ci] < 0.0001) continue;
 
       const bass    = parameters[this._pBass[ci]][0];
       const ipIsAR  = ipArr.length  > 1;
@@ -356,44 +380,66 @@ _genBlackR() {
       const fL0=this._filters[ci*4+0], fL1=this._filters[ci*4+1];
       const fR0=this._filters[ci*4+2], fR1=this._filters[ci*4+3];
 
-      // ── 1. Generate raw block ─────────────────────────────────────────────
       switch(ci) {
         case C_WHITE:
-          for (let i=0; i<bs; i++) { tmpL[i]=this._genWhite(); tmpR[i]=this._genWhite(); }
+          for (let i=0; i<bs; i++) {
+            tmpL[i]=this._genWhite();
+            tmpR[i]=this._genWhite();
+          }
           break;
+
         case C_PINK:
-          for (let i=0; i<bs; i++) { tmpL[i]=this._genPinkL(); tmpR[i]=this._genPinkR(); }
+          for (let i=0; i<bs; i++) {
+            tmpL[i]=this._genPinkL();
+            tmpR[i]=this._genPinkR();
+          }
           break;
+
         case C_BROWN: {
           const dc=0.5+bass*0.45, dc1=1-dc;
           for (let i=0; i<bs; i++) {
             const bL=this._genBrownL(), bR=this._genBrownR();
             this._brownDampL=this._brownDampL*dc+bL*dc1;
             this._brownDampR=this._brownDampR*dc+bR*dc1;
-            tmpL[i]=this._brownDampL; tmpR[i]=this._brownDampR;
+            tmpL[i]=this._brownDampL;
+            tmpR[i]=this._brownDampR;
           }
           break;
         }
+
         case C_GREY:
-          for (let i=0; i<bs; i++) { tmpL[i]=this._genGreyL(); tmpR[i]=this._genGreyR(); }
+          for (let i=0; i<bs; i++) {
+            tmpL[i]=this._genGreyL();
+            tmpR[i]=this._genGreyR();
+          }
           break;
+
         case C_BLUE:
-          for (let i=0; i<bs; i++) { tmpL[i]=this._genBlueL(); tmpR[i]=this._genBlueR(); }
+          for (let i=0; i<bs; i++) {
+            tmpL[i]=this._genBlueL();
+            tmpR[i]=this._genBlueR();
+          }
           break;
+
         case C_VIOLET:
           for (let i=0; i<bs; i++) {
             const v=this._genViolet();
-            tmpL[i]=v; tmpR[i]=v*0.97+this._rng()*0.03;
+            tmpL[i]=v;
+            tmpR[i]=softClip(v*0.97+this._rng()*0.03);
           }
           break;
-        case C_BLACK:
+
+        case C_BLACK: {
           for (let i=0; i<bs; i++) {
             const bL=this._genBlackL(), bR=this._genBlackR();
-            this._blackDampL=this._blackDampL*0.85+bL*0.15;
-            this._blackDampR=this._blackDampR*0.85+bR*0.15;
-            tmpL[i]=this._blackDampL; tmpR[i]=this._blackDampR;
+            this._blackDampL=this._blackDampL*0.88+bL*0.12;
+            this._blackDampR=this._blackDampR*0.88+bR*0.12;
+            tmpL[i]=this._blackDampL;
+            tmpR[i]=this._blackDampR;
           }
           break;
+        }
+
         case C_GREEN: {
           const texture=parameters[this._pTexture[ci]][0];
           const doGrain=texture>1e-4;
@@ -420,67 +466,59 @@ _genBlackR() {
         }
       }
 
-      // ── 2. Spectral shaping — 4 biquad passes ────────────────────────────
+      // Spectral shaping
       for (let i=0; i<bs; i++) tmpL[i]=fL0.process(tmpL[i]);
       for (let i=0; i<bs; i++) tmpL[i]=fL1.process(tmpL[i]);
       for (let i=0; i<bs; i++) tmpR[i]=fR0.process(tmpR[i]);
       for (let i=0; i<bs; i++) tmpR[i]=fR1.process(tmpR[i]);
 
-      // ── 3. Mix — all gain vars advanced sample-by-sample ─────────────────
-      // Local copies of smoother state — avoids array indexing in hot loop.
+      // Mix per-sample
       let smI  = this._smIntensity[ci];
       let smV  = this._smVolume[ci];
       let dr   = this._densityRamp[ci];
       let ramp = this._onRamp[ci];
 
       for (let i=0; i<bs; i++) {
-        // Read target — a-rate (automating) or k-rate (constant this block)
-        const tI = ipIsAR  ? ipArr[i]  : ipArr[0];
+        const tI = ipIsAR ? ipArr[i] : ipArr[0];
         const tV = volIsAR ? volArr[i] : volArr[0];
 
-        // All smoothers advance one sample — exponential, continuous, no steps
         dr   += (tI            - dr)   * kD;
         smI  += (dr            - smI)  * kS;
         smV  += (tV            - smV)  * kS;
         smMC += (targetMixComp - smMC) * kS;
         ramp += (1             - ramp) * kR;
 
-        const g   = smI * smV * BASE_GAIN * smMC * ramp;
+        const g    = smI * smV * BASE_GAIN * smMC * ramp;
         const mid  = (tmpL[i]+tmpR[i]) * 0.5;
-        const side = (tmpL[i]-tmpR[i]) * 0.4; // 0.5 * stereoWidth(0.8)
+        const side = (tmpL[i]-tmpR[i]) * 0.4;
         L[i] += (mid+side) * g;
         R[i] += (mid-side) * g;
       }
 
-      // Write back — next block continues from exactly where we left off
       this._smIntensity[ci] = smI;
       this._smVolume[ci]    = smV;
       this._densityRamp[ci] = dr;
       this._onRamp[ci]      = ramp;
-      // smMC intentionally NOT written here — continues into next layer's loop
     }
 
-    // Write smMC back once after all layers
     this._smMixComp = smMC;
 
-    // ─────────────────────────────────────────────────────────────────────────
     // BRAINWAVES
-    // ─────────────────────────────────────────────────────────────────────────
     const sw  = parameters['stereoWidth'][0];
     const TAU = 2*Math.PI;
 
     for (let wi=0; wi<NW; wi++) {
       if (parameters[this._pWEnabled[wi]][0]<0.5) continue;
 
-      const carrier     = parameters[this._pWCarrier[wi]][0];
-      const beat        = parameters[this._pWBeat[wi]][0];
-      const wIntensity  = parameters[this._pWIntensity[wi]][0];
-      const detune      = WAVE_DETUNE[wi];
-      const carrierL    = carrier*Math.pow(2,detune/12);
-      const carrierR    = carrierL*Math.pow(2,beat/(carrierL*12));
-      const stepL       = (TAU*carrierL)/sr;
-      const stepR       = (TAU*carrierR)/sr;
-      const amp         = wIntensity*0.15;
+      const carrier    = parameters[this._pWCarrier[wi]][0];
+      const beat       = parameters[this._pWBeat[wi]][0];
+      const wIntensity = parameters[this._pWIntensity[wi]][0];
+      const detune     = WAVE_DETUNE[wi];
+      const carrierL   = carrier*Math.pow(2,detune/12);
+      const carrierR   = carrierL*Math.pow(2,beat/(carrierL*12));
+      const stepL      = (TAU*carrierL)/sr;
+      const stepR      = (TAU*carrierR)/sr;
+      const amp        = wIntensity*0.15;
 
       let phL=this._wPhL[wi], phR=this._wPhR[wi];
       for (let i=0; i<bs; i++) {
@@ -493,9 +531,7 @@ _genBlackR() {
       this._wPhL[wi]=phL; this._wPhR[wi]=phR;
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
     // SPEAKER HP FILTER
-    // ─────────────────────────────────────────────────────────────────────────
     if (this._speakerMode) {
       const c=this._hpCoeff;
       let prevL=L[0], prevR=R[0];
@@ -508,15 +544,8 @@ _genBlackR() {
       }
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
     // OUTPUT SATURATOR + NaN guard
-    // Branch-free soft knee: f(x) = x / (1 + |x| * 0.4)
-    // This function has no threshold — it is smooth and continuous everywhere.
-    // A conditional limiter (if |x|>threshold) creates a kink in the transfer
-    // curve exactly at the threshold, which produces a click whenever the
-    // signal crosses it. This formulation has zero kinks, zero branches.
-    // At x=0: f(0)=0. At x=1: f(1)≈0.71. At x=2: f(2)≈0.83. Never reaches ±1.
-    // ─────────────────────────────────────────────────────────────────────────
+    // f(x) = x/(1+|x|*0.4) — continua, sin threshold, sin clicks posibles
     for (let i=0; i<bs; i++) {
       let l=L[i], r=R[i];
       if (l!==l||!isFinite(l)) l=0;
