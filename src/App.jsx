@@ -1811,51 +1811,7 @@ const [diagInfo, setDiagInfo] = useState(null);
                       nightingale: { name: '🐦 Nightingale', desc: 'Pure nightingale song in forest' }
                     };
                     const info = soundNames[soundKey];
-                    {/* DIAG PANEL FLOTANTE */}
-      {diagVisible && (
-        <div style={{
-          position: 'fixed', bottom: 80, right: 12, zIndex: 9999,
-          width: 300, maxHeight: 420,
-          background: 'rgba(2,6,23,0.97)', border: '1px solid rgba(250,204,21,0.4)',
-          borderRadius: 12, padding: 12, display: 'flex', flexDirection: 'column', gap: 8
-        }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ color: '#facc15', fontWeight: 700, fontSize: 13 }}>🔍 Audio Diagnostics</span>
-            <button onClick={() => setDiagEvents([])} style={{ fontSize: 11, color: '#64748b', background: 'none', border: 'none', cursor: 'pointer' }}>Clear</button>
-          </div>
-
-          {diagInfo && (
-            <div style={{ fontSize: 11, color: '#94a3b8', borderBottom: '1px solid rgba(250,204,21,0.15)', paddingBottom: 8 }}>
-              <span style={{ color: '#fde047' }}>SR:</span> {diagInfo.sampleRate} Hz &nbsp;|&nbsp;
-              <span style={{ color: '#fde047' }}>Block:</span> {diagInfo.blockSize} samples &nbsp;|&nbsp;
-              <span style={{ color: '#fde047' }}>≈</span> {(diagInfo.blockSize / diagInfo.sampleRate * 1000).toFixed(1)} ms
-            </div>
-          )}
-
-          <div style={{ overflowY: 'auto', maxHeight: 300, display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {diagEvents.length === 0
-              ? <span style={{ color: '#475569', fontSize: 11, textAlign: 'center', marginTop: 16 }}>No events yet — play audio to start</span>
-              : [...diagEvents].reverse().map((ev, i) => (
-                <div key={i} style={{
-                  fontSize: 11, padding: '4px 8px', borderRadius: 6,
-                  background: ev.t === 'GAP' ? 'rgba(239,68,68,0.15)' :
-                              ev.t === 'DSP_JUMP' ? 'rgba(250,204,21,0.12)' : 'rgba(71,85,105,0.3)',
-                  color: ev.t === 'GAP' ? '#fca5a5' :
-                         ev.t === 'DSP_JUMP' ? '#fde047' : '#64748b',
-                  borderLeft: `3px solid ${ev.t === 'GAP' ? '#ef4444' : ev.t === 'DSP_JUMP' ? '#facc15' : '#334155'}`
-                }}>
-                  {ev.t === 'GAP' &&
-                    `⏱ GAP +${ev.errMs}ms at block #${ev.block} (expected ${ev.expMs}ms, got ${ev.actMs}ms)`}
-                  {ev.t === 'DSP_JUMP' &&
-                    `⚡ JUMP Δ${ev.jump} at block #${ev.block} (${ev.prevL} → ${ev.nowL})`}
-                  {ev.t === 'DONE' &&
-                    `✅ Session: ${ev.blocks} blocks total`}
-                </div>
-              ))
-            }
-          </div>
-        </div>
-      )}
+                    
                     return (
                       <div key={soundKey} style={{ padding: '16px', borderRadius: '8px', transition: 'all 0.3s', background: 'rgba(30,41,59,0.5)', border: '2px solid rgba(250,204,21,0.2)', overflow: 'visible', textAlign: 'left' }}>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
@@ -2153,6 +2109,51 @@ const [diagInfo, setDiagInfo] = useState(null);
             >
               Continue in Free
             </button>
+          </div>
+        </div>
+      )}
+      {/* DIAG PANEL FLOTANTE */}
+      {diagVisible && (
+        <div style={{
+          position: 'fixed', bottom: 80, right: 12, zIndex: 9999,
+          width: 300, maxHeight: 420,
+          background: 'rgba(2,6,23,0.97)', border: '1px solid rgba(250,204,21,0.4)',
+          borderRadius: 12, padding: 12, display: 'flex', flexDirection: 'column', gap: 8
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ color: '#facc15', fontWeight: 700, fontSize: 13 }}>🔍 Audio Diagnostics</span>
+            <button onClick={() => setDiagEvents([])} style={{ fontSize: 11, color: '#64748b', background: 'none', border: 'none', cursor: 'pointer' }}>Clear</button>
+          </div>
+
+          {diagInfo && (
+            <div style={{ fontSize: 11, color: '#94a3b8', borderBottom: '1px solid rgba(250,204,21,0.15)', paddingBottom: 8 }}>
+              <span style={{ color: '#fde047' }}>SR:</span> {diagInfo.sampleRate} Hz &nbsp;|&nbsp;
+              <span style={{ color: '#fde047' }}>Block:</span> {diagInfo.blockSize} samples &nbsp;|&nbsp;
+              <span style={{ color: '#fde047' }}>≈</span> {(diagInfo.blockSize / diagInfo.sampleRate * 1000).toFixed(1)} ms
+            </div>
+          )}
+
+          <div style={{ overflowY: 'auto', maxHeight: 300, display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {diagEvents.length === 0
+              ? <span style={{ color: '#475569', fontSize: 11, textAlign: 'center', marginTop: 16 }}>No events yet — play audio to start</span>
+              : [...diagEvents].reverse().map((ev, i) => (
+                <div key={i} style={{
+                  fontSize: 11, padding: '4px 8px', borderRadius: 6,
+                  background: ev.t === 'GAP' ? 'rgba(239,68,68,0.15)' :
+                              ev.t === 'DSP_JUMP' ? 'rgba(250,204,21,0.12)' : 'rgba(71,85,105,0.3)',
+                  color: ev.t === 'GAP' ? '#fca5a5' :
+                         ev.t === 'DSP_JUMP' ? '#fde047' : '#64748b',
+                  borderLeft: `3px solid ${ev.t === 'GAP' ? '#ef4444' : ev.t === 'DSP_JUMP' ? '#facc15' : '#334155'}`
+                }}>
+                  {ev.t === 'GAP' &&
+                    `⏱ GAP +${ev.errMs}ms at block #${ev.block} (expected ${ev.expMs}ms, got ${ev.actMs}ms)`}
+                  {ev.t === 'DSP_JUMP' &&
+                    `⚡ JUMP Δ${ev.jump} at block #${ev.block} (${ev.prevL} → ${ev.nowL})`}
+                  {ev.t === 'DONE' &&
+                    `✅ Session: ${ev.blocks} blocks total`}
+                </div>
+              ))
+            }
           </div>
         </div>
       )}
