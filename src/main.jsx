@@ -3,7 +3,7 @@ import ReactDOM from 'react-dom/client';
 import './index.css';
 import './App.css';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import AdvancedSoundEngine from "./App";
+import App from "./App";
 import LoginScreen from './LoginScreen';
 
 // Root wrapper — decides what to show
@@ -11,14 +11,12 @@ const Root = () => {
   const { user, isPro, loading, signOut } = useAuth();
   const [guest, setGuest] = useState(false);
 
-  // "Continue as guest" button in LoginScreen fires this event
   useEffect(() => {
     const handler = () => setGuest(true);
     window.addEventListener('neurial:skip-login', handler);
     return () => window.removeEventListener('neurial:skip-login', handler);
   }, []);
 
-  // Loading splash while Supabase checks the session
   if (loading) {
     return (
       <div className="min-h-screen w-full bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center">
@@ -32,19 +30,11 @@ const Root = () => {
     );
   }
 
-  // Not logged in and not guest — show login
   if (!user && !guest) {
     return <LoginScreen />;
   }
 
-  // Logged in OR guest — show the generator
-  return (
-    <AdvancedSoundEngine
-      isPro={isPro}
-      user={user}
-      onSignOut={user ? signOut : null}
-    />
-  );
+  return <App />;
 };
 
 ReactDOM.createRoot(document.getElementById('root')).render(
