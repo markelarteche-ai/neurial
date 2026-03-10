@@ -325,8 +325,10 @@ class RealtimeEngineMobile extends AudioWorkletProcessor {
       }
       this._diagLastTime  = now;
       this._diagBlockSize = bs;
-      if (this._diagCount % 100 === 0 && this._diagLog.length > 0) {
-        this.port.postMessage({ type:'diagReport', events: this._diagLog.splice(0) });
+if (this._diagCount === 1) {
+  this.port.postMessage({ type:'diagInfo', sampleRate, blockSize: bs });
+}
+if (this._diagCount % 50 === 0 && this._diagLog.length > 0) {        this.port.postMessage({ type:'diagReport', events: this._diagLog.splice(0) });
       }
     }
     // ─────────────────────────────────────────────────────────────────────────
