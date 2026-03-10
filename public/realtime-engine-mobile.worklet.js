@@ -225,15 +225,15 @@ this._blackL=this._rng()*0.001; this._blackR=this._rng()*0.001;
   }
 
   _genBrownL() {
-    this._brownL+=(this._rng()*0.01); this._brownL*=0.992;
-    if(this._brownL>1)this._brownL=1; else if(this._brownL<-1)this._brownL=-1;
-    return this._brownL*0.6;
-  }
-  _genBrownR() {
-    this._brownR+=(this._rng()*0.01); this._brownR*=0.992;
-    if(this._brownR>1)this._brownR=1; else if(this._brownR<-1)this._brownR=-1;
-    return this._brownR*0.6;
-  }
+  this._brownL+=(this._rng()*0.01); this._brownL*=0.992;
+  this._brownL = this._brownL / (1 + (this._brownL < 0 ? -this._brownL : this._brownL));
+  return this._brownL*0.6;
+}
+_genBrownR() {
+  this._brownR+=(this._rng()*0.01); this._brownR*=0.992;
+  this._brownR = this._brownR / (1 + (this._brownR < 0 ? -this._brownR : this._brownR));
+  return this._brownR*0.6;
+}
 
   _genGreyL() {
     const w=this._rng(), p=this._genPinkL()*0.18;
@@ -262,12 +262,12 @@ this._blackL=this._rng()*0.001; this._blackR=this._rng()*0.001;
 
   _genBlackL() {
   this._blackL+=(this._rng()*0.01); this._blackL*=0.992;
-  if(this._blackL>1)this._blackL=1; else if(this._blackL<-1)this._blackL=-1;
+  this._blackL = this._blackL / (1 + (this._blackL < 0 ? -this._blackL : this._blackL));
   return this._blackL*0.42;
 }
 _genBlackR() {
   this._blackR+=(this._rng()*0.01); this._blackR*=0.992;
-  if(this._blackR>1)this._blackR=1; else if(this._blackR<-1)this._blackR=-1;
+  this._blackR = this._blackR / (1 + (this._blackR < 0 ? -this._blackR : this._blackR));
   return this._blackR*0.42;
 }
 
