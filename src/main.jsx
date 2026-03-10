@@ -3,7 +3,7 @@ import ReactDOM from 'react-dom/client';
 import './index.css';
 import './App.css';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import App from "./Router";
+import Router from "./Router";
 import LoginScreen from './LoginScreen';
 
 // Root wrapper — decides what to show
