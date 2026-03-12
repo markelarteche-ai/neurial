@@ -33,10 +33,10 @@ export default function Features() {
         html, body, #root { margin: 0 !important; padding: 0 !important; width: 100% !important; height: 100% !important; overflow: hidden !important; }
       `}</style>
       <Navbar />
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: '100%', padding: '0 32px' }}>
-        <div style={{ width: '100%', maxWidth: '900px' }}>
+      <div style={{ flex: 1, display: 'flex', width: '100%' }}>
+        <div style={{ margin: 'auto', width: '100%', maxWidth: '900px', padding: '0 32px' }}>
           <h1 style={{ fontSize: '34px', fontWeight: 900, margin: '0 0 6px 0', textAlign: 'center', background: 'linear-gradient(to right,#fef9c3,#fde047,#facc15)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Features</h1>
-          <p style={{ color: 'rgba(254,240,138,0.6)', margin: '0 0 24px 0', fontSize: '14px', textAlign: 'center' }}>Everything you need to create the perfect audio environment.</p>
+          <p style={{ color: 'rgba(254,240,138,0.6)', margin: '0 0 20px 0', fontSize: '14px', textAlign: 'center' }}>Everything you need to create the perfect audio environment.</p>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
             {FEATURES.map(([icon, title, desc]) => (
               <div key={title} style={{ padding: '24px 16px', borderRadius: '12px', background: 'rgba(30,41,59,0.5)', border: '2px solid rgba(250,204,21,0.2)', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: '10px' }}>
