@@ -39,12 +39,10 @@ export default function Features() {
           <p style={{ color: 'rgba(254,240,138,0.6)', margin: '0 0 20px 0', fontSize: '15px', textAlign: 'center' }}>Everything you need to create the perfect audio environment.</p>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
             {FEATURES.map(([icon, title, desc]) => (
-              <div key={title} style={{ padding: '14px 16px', borderRadius: '10px', background: 'rgba(30,41,59,0.5)', border: '2px solid rgba(250,204,21,0.2)', display: 'flex', gap: '14px', alignItems: 'flex-start' }}>
-                <span style={{ fontSize: '22px', flexShrink: 0 }}>{icon}</span>
-                <div>
-                  <h3 style={{ color: '#fef08a', fontWeight: 700, fontSize: '14px', margin: '0 0 4px 0' }}>{title}</h3>
-                  <p style={{ color: '#94a3b8', fontSize: '12px', lineHeight: '1.5', margin: 0 }}>{desc}</p>
-                </div>
+              <div key={title} style={{ padding: '20px', borderRadius: '10px', background: 'rgba(30,41,59,0.5)', border: '2px solid rgba(250,204,21,0.2)', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '26px' }}>{icon}</span>
+                <h3 style={{ color: '#fef08a', fontWeight: 700, fontSize: '14px', margin: 0 }}>{title}</h3>
+                <p style={{ color: '#94a3b8', fontSize: '12px', lineHeight: '1.5', margin: 0 }}>{desc}</p>
               </div>
             ))}
           </div>
