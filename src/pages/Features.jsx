@@ -1,28 +1,13 @@
 import { Link } from "react-router-dom";
-
-const NAV_LINKS = [["Features", "/features"], ["Pricing", "/pricing"], ["Use Cases", "/use-cases"]];
-
-function Navbar() {
-  return (
-    <div style={{ width: '100%', padding: '20px 32px', borderBottom: '1px solid rgba(250,204,21,0.2)', background: 'linear-gradient(to right,rgba(15,23,42,0.5),rgba(30,41,59,0.5))', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, boxSizing: 'border-box' }}>
-      <Link to="/" style={{ fontSize: '22px', fontWeight: 900, letterSpacing: '2px', background: 'linear-gradient(to right,#fef9c3,#fde047,#facc15)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', textDecoration: 'none' }}>NEURIAL</Link>
-      <div style={{ display: 'flex', gap: '28px', alignItems: 'center' }}>
-        {NAV_LINKS.map(([label, path]) => (
-          <Link key={path} to={path} style={{ color: 'rgba(254,240,138,0.7)', textDecoration: 'none', fontSize: '14px' }}>{label}</Link>
-        ))}
-        <Link to="/app" style={{ padding: '8px 18px', borderRadius: '10px', fontWeight: 700, fontSize: '14px', background: 'linear-gradient(to right,#facc15,#fde047)', color: '#000', textDecoration: 'none' }}>Open App</Link>
-      </div>
-    </div>
-  );
-}
+import Navbar from "../components/Navbar";
 
 const FEATURES = [
-  ['🎨', 'Noise Colors', 'White, pink, brown, grey, blue, violet, black and green noise.'],
-  ['🌿', 'Nature Sounds', 'Rain, ocean, fire, wind, waterfall, river, forest and more.'],
-  ['🧠', 'Brainwaves', 'Alpha, theta, delta, beta and gamma binaural beats.'],
-  ['⚡', 'Real-time Engine', 'All changes apply instantly while playing.'],
-  ['💾', 'Export', 'WAV 24-bit or MP3 up to 320kbps, up to 8 hours.'],
-  ['🎛️', 'Processing', 'Stereo width, saturation, spectral drift and more.'],
+  ['🎨', 'Noise Color Mixer', 'Mix 8 noise types — white, pink, brown, grey, blue, violet, black and green — each with individual intensity, volume and texture controls.'],
+  ['🌿', 'Nature Sound Layers', 'Layer rain, thunderstorm, ocean waves, wind, campfire, waterfall, river, night forest or nightingale over your noise mix.'],
+  ['🧠', 'Binaural Brainwave Entrainment', 'Precisely tuned binaural beats with adjustable carrier and beat frequencies to guide your brain into alpha, theta, delta, beta or gamma states.'],
+  ['⚡', 'Real-time Audio Engine', 'Built on a custom AudioWorklet engine. Every parameter updates instantly — no restarts, no interruptions, no latency.'],
+  ['💾', 'High-Quality Export', 'Export up to 8 hours of audio as WAV 24-bit at 44.1kHz or 48kHz, or MP3 up to 320kbps.'],
+  ['🎛️', 'Professional Processing', 'Stereo width control, harmonic saturation, spectral drift, temporal smoothing and advanced mixing for audiophiles and professionals.'],
 ];
 
 export default function Features() {
@@ -33,15 +18,14 @@ export default function Features() {
         html, body, #root { margin: 0 !important; padding: 0 !important; width: 100% !important; height: 100% !important; overflow: hidden !important; }
       `}</style>
       <Navbar />
-      <div style={{ flex: 1, display: 'flex', width: '100%' }}>
-        <div style={{ margin: 'auto', width: '100%', maxWidth: '900px', padding: '0 32px' }}>
-          <h1 style={{ fontSize: '34px', fontWeight: 900, margin: '0 0 6px 0', textAlign: 'center', background: 'linear-gradient(to right,#fef9c3,#fde047,#facc15)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Features</h1>
-          <p style={{ color: 'rgba(254,240,138,0.6)', margin: '0 0 20px 0', fontSize: '14px', textAlign: 'center' }}>Everything you need to create the perfect audio environment.</p>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
+      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '10px 32px 50px 32px', width: '100%' }}>
+        <div style={{ width: '100%', maxWidth: '700px' }}>
+          <h1 style={{ fontSize: '34px', fontWeight: 900, margin: '0 0 4px 0', textAlign: 'center', background: 'linear-gradient(to right,#fef9c3,#fde047,#facc15)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Features</h1>
+          <p style={{ color: 'rgba(254,240,138,0.6)', margin: '0 0 16px 0', fontSize: '14px', textAlign: 'center' }}>Everything under the hood.</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '11px' }}>
             {FEATURES.map(([icon, title, desc]) => (
-              <div key={title} style={{ padding: '24px 16px', borderRadius: '12px', background: 'rgba(30,41,59,0.5)', border: '2px solid rgba(250,204,21,0.2)', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: '10px' }}>
-                <span style={{ fontSize: '28px' }}>{icon}</span>
-                <h3 style={{ color: '#fef08a', fontWeight: 700, fontSize: '14px', margin: 0 }}>{title}</h3>
+              <div key={title} style={{ padding: '11px 20px', borderRadius: '10px', background: 'rgba(30,41,59,0.5)', border: '2px solid rgba(250,204,21,0.2)', borderLeft: '4px solid #facc15', textAlign: 'center' }}>
+                <h3 style={{ color: '#fef08a', fontWeight: 700, fontSize: '14px', margin: '0 0 3px 0' }}>{icon} {title}</h3>
                 <p style={{ color: '#94a3b8', fontSize: '12px', lineHeight: '1.5', margin: 0 }}>{desc}</p>
               </div>
             ))}
