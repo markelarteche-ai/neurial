@@ -33,16 +33,18 @@ export default function Features() {
         html, body, #root { margin: 0 !important; padding: 0 !important; width: 100% !important; height: 100% !important; overflow: hidden !important; }
       `}</style>
       <Navbar />
-      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 32px', width: '100%' }}>
-        <div style={{ width: '100%', maxWidth: '960px' }}>
-          <h1 style={{ fontSize: '32px', fontWeight: 900, margin: '0 0 4px 0', textAlign: 'center', background: 'linear-gradient(to right,#fef9c3,#fde047,#facc15)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Features</h1>
-          <p style={{ color: 'rgba(254,240,138,0.6)', margin: '0 0 16px 0', fontSize: '13px', textAlign: 'center' }}>Everything you need to create the perfect audio environment.</p>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: '100%', padding: '0 32px' }}>
+        <div style={{ width: '100%', maxWidth: '960px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          <div style={{ textAlign: 'center' }}>
+            <h1 style={{ fontSize: '36px', fontWeight: 900, margin: '0 0 8px 0', background: 'linear-gradient(to right,#fef9c3,#fde047,#facc15)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Features</h1>
+            <p style={{ color: 'rgba(254,240,138,0.6)', margin: 0, fontSize: '14px' }}>Everything you need to create the perfect audio environment.</p>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
             {FEATURES.map(([icon, title, desc]) => (
-              <div key={title} style={{ padding: '14px 16px', borderRadius: '10px', background: 'rgba(30,41,59,0.5)', border: '2px solid rgba(250,204,21,0.2)', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: '6px' }}>
-                <span style={{ fontSize: '22px' }}>{icon}</span>
-                <h3 style={{ color: '#fef08a', fontWeight: 700, fontSize: '13px', margin: 0 }}>{title}</h3>
-                <p style={{ color: '#94a3b8', fontSize: '11px', lineHeight: '1.5', margin: 0 }}>{desc}</p>
+              <div key={title} style={{ padding: '20px', borderRadius: '12px', background: 'rgba(30,41,59,0.5)', border: '2px solid rgba(250,204,21,0.2)', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: '10px' }}>
+                <span style={{ fontSize: '26px' }}>{icon}</span>
+                <h3 style={{ color: '#fef08a', fontWeight: 700, fontSize: '14px', margin: 0 }}>{title}</h3>
+                <p style={{ color: '#94a3b8', fontSize: '12px', lineHeight: '1.6', margin: 0 }}>{desc}</p>
               </div>
             ))}
           </div>
