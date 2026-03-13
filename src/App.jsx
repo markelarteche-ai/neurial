@@ -1597,18 +1597,21 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
               {/* LEFT: NEURIAL title + Waves icon + subtitle */}
               <div style={{ textAlign: 'left' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px' }}>
-                  <h1 style={{
-                    fontSize: '30px',
-                    fontWeight: 700,
-                    margin: 0,
-                    background: 'linear-gradient(to right,#fef9c3,#fde047,#facc15)',
-                    WebkitBackgroundClip: 'text',
-                    WebkitTextFillColor: 'transparent',
-                    backgroundClip: 'text',
-                    animation: 'neurialWaveMotion 4s ease-in-out infinite'
-                  }}>
-                    NEURIAL
-                  </h1>
+                  <a href="/" style={{ textDecoration: 'none' }}>
+  <h1 style={{
+    fontSize: '30px',
+    fontWeight: 700,
+    margin: 0,
+    background: 'linear-gradient(to right,#fef9c3,#fde047,#facc15)',
+    WebkitBackgroundClip: 'text',
+    WebkitTextFillColor: 'transparent',
+    backgroundClip: 'text',
+    animation: 'neurialWaveMotion 4s ease-in-out infinite',
+    cursor: 'pointer'
+  }}>
+    NEURIAL
+  </h1>
+</a>
                   <Waves style={{ width: '30px', height: '30px', color: '#fde047', animation: 'pulse 2s ease-in-out infinite', flexShrink: 0 }} />
                 </div>
                 <p style={{ fontSize: '14px', color: 'rgba(254,240,138,0.8)', margin: 0 }}>✨ Professional 3D audio with crystal-clear quality</p>
