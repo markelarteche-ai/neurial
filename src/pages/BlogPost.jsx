@@ -77,10 +77,10 @@ export default function BlogPost() {
       <Navbar />
 
       <div style={{ flex: 1, display: 'flex', justifyContent: 'center', padding: '32px 24px 100px 24px' }}>
-        <div style={{ width: '100%', maxWidth: '720px' }}>
+        <div style={{ width: '100%', maxWidth: '720px', textAlign: 'left' }}>
 
-          <div style={{ marginBottom: '32px' }}>
-            <Link to="/blog" style={{ color: 'rgba(250,204,21,0.6)', textDecoration: 'none', fontSize: '13px' }}>← Back to Blog</Link>
+          <div style={{ marginBottom: '32px', textAlign: 'left' }}>
+            <Link to="/blog" style={{ color: 'rgba(250,204,21,0.6)', textDecoration: 'none', fontSize: '13px', display: 'inline-block', textAlign: 'left' }}>← Back to Blog</Link>
           </div>
 
           <p style={{ color: 'rgba(254,240,138,0.4)', fontSize: '13px', margin: '0 0 10px 0', letterSpacing: '0.5px', textAlign: 'center' }}>{post.date}</p>
