@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 
-const NAV_LINKS = [["Features", "/features"], ["Pricing", "/pricing"], ["Use Cases", "/use-cases"], ["Blog", "/blog"]];
+const NAV_LINKS = [["Home", "/"], ["Features", "/features"], ["Pricing", "/pricing"], ["Use Cases", "/use-cases"], ["Blog", "/blog"]];
 
 export default function Navbar() {
   return (
