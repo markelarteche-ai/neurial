@@ -29,14 +29,14 @@ export default function BlogPost() {
           color: #cbd5e1;
           font-size: 16px;
           line-height: 1.8;
-          margin: 0 0 22px 0;
+          margin: 0 0 32px 0;
           text-align: left !important;
         }
         .article-body h2 {
           color: #fef08a;
           font-size: 22px;
           font-weight: 700;
-          margin: 40px 0 16px 0;
+          margin: 64px 0 16px 0;
           text-align: left !important;
         }
         .article-body h3 {
@@ -52,7 +52,7 @@ export default function BlogPost() {
           font-size: 16px;
           line-height: 1.8;
           padding-left: 24px;
-          margin: 0 0 22px 0;
+          margin: 0 0 32px 0;
           text-align: left !important;
           list-style-position: outside;
         }
