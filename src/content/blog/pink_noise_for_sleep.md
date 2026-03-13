@@ -5,8 +5,6 @@ description: How pink noise improves sleep quality, reduces microarousals, and h
 slug: pink-noise-for-sleep
 ---
 
-# Pink Noise for Sleep
-
 ## What Is Pink Noise
 
 Pink noise is a sound signal where energy decreases as frequency increases. Lower frequencies carry more power, higher frequencies carry less, and the drop follows a consistent ratio across the spectrum. The result is a sound that feels warm and balanced — not sharp like static, not heavy like a low rumble.
