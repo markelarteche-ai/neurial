@@ -3,6 +3,13 @@ import ReactMarkdown from "react-markdown";
 import Navbar from "../components/Navbar";
 import { getPostBySlug } from "../hooks/useBlogPosts";
 
+const formatDate = (dateStr) => {
+  if (!dateStr) return '';
+  const [year, month, day] = dateStr.split('-').map(Number);
+  const date = new Date(year, month - 1, day);
+  return date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+};
+
 export default function BlogPost() {
   const { slug } = useParams();
   const post = getPostBySlug(slug);
@@ -83,7 +90,7 @@ export default function BlogPost() {
             <Link to="/blog" style={{ color: 'rgba(250,204,21,0.6)', textDecoration: 'none', fontSize: '13px', display: 'inline-block', textAlign: 'left' }}>← Back to Blog</Link>
           </div>
 
-          <p style={{ color: 'rgba(254,240,138,0.4)', fontSize: '13px', margin: '0 0 10px 0', letterSpacing: '0.5px', textAlign: 'center' }}>{post.date}</p>
+          <p style={{ color: 'rgba(254,240,138,0.4)', fontSize: '13px', margin: '0 0 10px 0', letterSpacing: '0.5px', textAlign: 'center' }}>{formatDate(post.date)}</p>
 
           <h1 style={{ fontSize: '38px', fontWeight: 900, margin: '0 0 48px 0', background: 'linear-gradient(to right,#fef9c3,#fde047,#facc15)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', lineHeight: 1.2, textAlign: 'center' }}>
             {post.title}
