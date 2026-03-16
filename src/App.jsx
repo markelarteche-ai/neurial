@@ -346,6 +346,7 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
 
   const natureAudioRefs    = useRef({});
   const natureGainNodes    = useRef({});
+  const natureToggleLock = useRef(false);
   const natureBufferCacheRef = useRef({});
   // CAMBIO 2: MobileAudioEngine ref
   const mobileEngineRef = useRef(null);
@@ -782,19 +783,41 @@ mobileEngineRef.current = engine;
   // CAMBIO 4: handleNatureToggle uses mobile ctx
   
   const handleNatureToggle = (soundKey, checked) => {
-    setNatureSounds(prev => ({ ...prev, [soundKey]: { ...prev[soundKey], enabled: checked } }));
-    if (checked) {
-      const ctx = isMobile ? mobileEngineRef.current?.ctx : audioContextRef.current;
-      if (ctx && ctx.state !== 'closed' && !natureAudioRefs.current[soundKey]) {
-        const currentVolume = natureSoundsRef.current[soundKey]?.volume ?? 70;
-        startNatureSound(soundKey, currentVolume);
-      }
-    } else {
-      if (natureAudioRefs.current[soundKey]) {
-        stopNatureSoundImperative(soundKey, false);
-      }
+
+  if (natureToggleLock.current) return;
+
+  natureToggleLock.current = true;
+
+  setTimeout(() => {
+    natureToggleLock.current = false;
+  }, 300);
+
+  setNatureSounds(prev => ({
+    ...prev,
+    [soundKey]: { ...prev[soundKey], enabled: checked }
+  }));
+
+  if (checked) {
+
+    const ctx = isMobile ? mobileEngineRef.current?.ctx : audioContextRef.current;
+
+    if (ctx && ctx.state !== 'closed' && !natureAudioRefs.current[soundKey]) {
+
+      const currentVolume = natureSoundsRef.current[soundKey]?.volume ?? 70;
+
+      startNatureSound(soundKey, currentVolume);
+
     }
-  };
+
+  } else {
+
+    if (natureAudioRefs.current[soundKey]) {
+      stopNatureSoundImperative(soundKey, false);
+    }
+
+  }
+
+};
 
   const lastPlayTimestamp = useRef(0);
   const workletLoadedRef = useRef(false);
@@ -1964,7 +1987,22 @@ const applyPreset = async (k) => {
                     };
                     const info = soundNames[soundKey];
                     return (
-                      <div key={soundKey} style={{ padding: '16px', borderRadius: '8px', transition: 'all 0.3s', background: 'rgba(30,41,59,0.5)', border: '2px solid rgba(250,204,21,0.2)', overflow: 'visible', textAlign: 'left' }}>
+                      <div
+  key={soundKey}
+  style={{
+    padding: '16px',
+    borderRadius: '8px',
+    transition: 'all 0.3s',
+    background: 'rgba(30,41,59,0.5)',
+    border: soundConfig.enabled
+  ? '2px solid rgba(250,204,21,0.8)'
+  : '2px solid rgba(250,204,21,0.2)',
+    overflow: 'visible',
+    textAlign: 'left',
+    cursor: 'pointer'
+  }}
+  onClick={() => handleNatureToggle(soundKey, !soundConfig.enabled)}
+>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
                           <div>
                             <h4 style={{ color: '#fef08a', fontWeight: 500, fontSize: '14px', margin: '0 0 2px 0' }}>{info.name}</h4>
@@ -1972,10 +2010,11 @@ const applyPreset = async (k) => {
                           </div>
                           <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
                             <input
-                              type="checkbox"
-                              checked={soundConfig.enabled}
-                              onChange={(e) => handleNatureToggle(soundKey, e.target.checked)}
-                            />
+  type="checkbox"
+  checked={soundConfig.enabled}
+  onClick={(e) => e.stopPropagation()}
+  onChange={(e) => handleNatureToggle(soundKey, e.target.checked)}
+/>
                             <span style={{ fontSize: '12px', color: 'rgba(254,240,138,0.7)' }}>Enable</span>
                           </label>
                         </div>
