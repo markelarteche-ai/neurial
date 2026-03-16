@@ -353,14 +353,14 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
   const NT = { translate: 'no', className: 'notranslate' };
 
   const [layers, setLayers] = useState({
-    white: { intensity: 0, bass: 50, volume: 100, texture: 50, brightness: 50 },
-    pink: { intensity: 0, bass: 50, volume: 100, texture: 50, brightness: 50 },
-    brown: { intensity: 60, bass: 50, volume: 100, texture: 50, brightness: 50 },
-    grey: { intensity: 0, bass: 50, volume: 100, texture: 50, brightness: 50 },
-    blue: { intensity: 0, bass: 50, volume: 100, texture: 50, brightness: 50 },
-    violet:{ intensity: 0, bass: 50, volume: 100, texture: 50, brightness: 50 },
-    black: { intensity: 0, bass: 50, volume: 100, texture: 50, brightness: 50 },
-    green: { intensity: 0, bass: 50, volume: 100, texture: 50, brightness: 50 }
+    white: { intensity: 0, bass: 50, volume: 0, texture: 50, brightness: 50 },
+    pink: { intensity: 0, bass: 50, volume: 0, texture: 50, brightness: 50 },
+    brown: { intensity: 60, bass: 50, volume: 0, texture: 50, brightness: 50 },
+    grey: { intensity: 0, bass: 50, volume: 0, texture: 50, brightness: 50 },
+    blue: { intensity: 0, bass: 50, volume: 0, texture: 50, brightness: 50 },
+    violet:{ intensity: 0, bass: 50, volume: 0, texture: 50, brightness: 50 },
+    black: { intensity: 0, bass: 50, volume: 0, texture: 50, brightness: 50 },
+    green: { intensity: 0, bass: 50, volume: 0, texture: 50, brightness: 50 }
   });
 
   const [brainwaves, setBrainwaves] = useState({
@@ -514,21 +514,33 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
 
   // CAMBIO 3: sync mobile layers on change — intensity = ON/OFF, volume = loudness
   useEffect(() => {
-    if (!isMobile || !isPlaying || !mobileEngineRef.current) return;
-    const engine = mobileEngineRef.current;
-    Object.entries(layers).forEach(([type, cfg]) => {
-      if (cfg.intensity > 0) {
-        const gain = (cfg.intensity / 100) * (cfg.volume / 100) * 100;
-        if (!engine.layers[type]) {
-          engine.playLayer(type, gain);
-        } else {
-          engine.setVolume(type, gain);
-        }
+  if (!isMobile || !isPlaying || !mobileEngineRef.current) return;
+
+  const engine = mobileEngineRef.current;
+
+  Object.entries(layers).forEach(([type, cfg]) => {
+
+    const volume = cfg.volume;
+
+    if (volume > 0) {
+
+      if (!engine.layers[type]) {
+        engine.playLayer(type, volume);
       } else {
-        if (engine.layers[type]) engine.stopLayer(type);
+        engine.setVolume(type, volume);
       }
-    });
-  }, [layers, isPlaying]);
+
+    } else {
+
+      if (engine.layers[type]) {
+        engine.stopLayer(type);
+      }
+
+    }
+
+  });
+
+}, [layers, isPlaying]);
 
   const natureLoadingRef = useRef({});
 
