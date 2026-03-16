@@ -512,14 +512,18 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
     natureSounds.river.volume, natureSounds.nightforest.volume, natureSounds.nightingale.volume
   ]);
 
-  // CAMBIO 3: sync mobile layers on change
+  // CAMBIO 3: sync mobile layers on change — intensity = ON/OFF, volume = loudness
   useEffect(() => {
     if (!isMobile || !isPlaying || !mobileEngineRef.current) return;
     const engine = mobileEngineRef.current;
     Object.entries(layers).forEach(([type, cfg]) => {
       if (cfg.intensity > 0) {
-        if (!engine.layers[type]) engine.playLayer(type, (cfg.intensity / 100) * (cfg.volume / 100));
-        else engine.setLayerGain(type, cfg.intensity, cfg.volume);
+        const gain = (cfg.intensity / 100) * (cfg.volume / 100) * 100;
+        if (!engine.layers[type]) {
+          engine.playLayer(type, gain);
+        } else {
+          engine.setVolume(type, gain);
+        }
       } else {
         if (engine.layers[type]) engine.stopLayer(type);
       }
@@ -777,7 +781,10 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
         await engine.init();
         mobileEngineRef.current = engine;
         Object.entries(layers).forEach(([type, cfg]) => {
-          if (cfg.intensity > 0) engine.playLayer(type, (cfg.intensity / 100) * (cfg.volume / 100));
+          if (cfg.intensity > 0) {
+            const gain = (cfg.intensity / 100) * (cfg.volume / 100) * 100;
+            engine.playLayer(type, gain);
+          }
         });
         setIsPlaying(true);
         isPlayingRef.current = true;
@@ -1772,11 +1779,15 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
                       <h4 style={{ color: '#fef08a', fontWeight: 500, fontSize: '14px', marginBottom: '8px', textTransform: 'capitalize', margin: '0 0 8px 0' }}>{t} Noise</h4>
                       <p style={{ fontSize: '12px', marginBottom: '12px', color: 'rgba(254,240,138,0.6)', margin: '0 0 12px 0' }}>{getLayerDesc(t)}</p>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                        <div style={{ paddingBottom: '4px' }}>
-                          <label style={{ display: 'block', fontSize: '12px', marginBottom: '8px', color: 'rgba(254,240,138,0.7)' }}>Intensity: <span {...NT}>{c.intensity}%</span></label>
-                          <input type="range" min="0" max="100" value={c.intensity} onChange={(e) => { const v = parseInt(e.target.value); setLayers(pr => ({ ...pr, [t]: { ...pr[t], intensity: v } })); sendParam(`${t}_intensity`, v / 100); }} />
-                        </div>
-                        {c.intensity > 0 && (
+                        {/* Desktop: intensity slider — hidden on mobile */}
+                        {!isMobile && (
+                          <div style={{ paddingBottom: '4px' }}>
+                            <label style={{ display: 'block', fontSize: '12px', marginBottom: '8px', color: 'rgba(254,240,138,0.7)' }}>Intensity: <span {...NT}>{c.intensity}%</span></label>
+                            <input type="range" min="0" max="100" value={c.intensity} onChange={(e) => { const v = parseInt(e.target.value); setLayers(pr => ({ ...pr, [t]: { ...pr[t], intensity: v } })); sendParam(`${t}_intensity`, v / 100); }} />
+                          </div>
+                        )}
+                        {/* Desktop: volume + texture shown when intensity > 0 / Mobile: volume always shown */}
+                        {(isMobile || c.intensity > 0) && (
                           <>
                             <div style={{ paddingBottom: '4px' }}>
                               <label style={{ display: 'block', fontSize: '12px', marginBottom: '8px', color: 'rgba(254,240,138,0.7)' }}>Volume: <span {...NT}>{c.volume}%</span></label>

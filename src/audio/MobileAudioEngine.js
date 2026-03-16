@@ -4,14 +4,14 @@
 // Each noise layer is an AudioBufferSourceNode → GainNode → masterGain → destination
 
 const NOISE_URLS = {
-  white:  '/src/audio/mobile_loops/white_noise_loop.mp3',
-  pink:   '/src/audio/mobile_loops/pink_noise_loop.mp3',
-  brown:  '/src/audio/mobile_loops/brown_noise_loop.mp3',
-  grey:   '/src/audio/mobile_loops/grey_noise_loop.mp3',
-  black:  '/src/audio/mobile_loops/black_noise_loop.mp3',
-  green:  '/src/audio/mobile_loops/green_noise_loop.mp3',
-  blue:   '/src/audio/mobile_loops/blue_noise_loop.mp3',
-  violet: '/src/audio/mobile_loops/violet_noise_loop.mp3',
+  white:  '/sounds/mobile_loops/white_noise_loop.mp3',
+  pink:   '/sounds/mobile_loops/pink_noise_loop.mp3',
+  brown:  '/sounds/mobile_loops/brown_noise_loop.mp3',
+  grey:   '/sounds/mobile_loops/grey_noise_loop.mp3',
+  black:  '/sounds/mobile_loops/black_noise_loop.mp3',
+  green:  '/sounds/mobile_loops/green_noise_loop.mp3',
+  blue:   '/sounds/mobile_loops/blue_noise_loop.mp3',
+  violet: '/sounds/mobile_loops/violet_noise_loop.mp3',
 };
 
 const XFADE_SAMPLES = 128;
