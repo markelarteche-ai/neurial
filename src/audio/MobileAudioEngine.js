@@ -27,7 +27,8 @@ const xfadeCurveIn = new Float32Array(XFADE_SAMPLES).map((_, i) =>
 const _bufferCache  = {};   // url → { buffer, trimStart, playDuration }
 const _loadingRefs  = {};   // url → pending Promise
 
-export class MobileAudioEngine {
+export class MobileAudioEngine { buffers = {};
+loadingPromise = null;
   constructor() {
     this.ctx          = null;
     this.masterGain   = null;
@@ -40,23 +41,21 @@ export class MobileAudioEngine {
 
   // ─── INIT ────────────────────────────────────────────────────────────────
   async init() {
-    const AudioCtx = window.AudioContext || window.webkitAudioContext;
-    this.ctx = new AudioCtx({ latencyHint: 'balanced', sampleRate: 44100 });
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  this.ctx = new AudioCtx({ latencyHint: 'balanced', sampleRate: 44100 });
 
-    this.masterGain = this.ctx.createGain();
-    this.masterGain.gain.value = 1;
-    this.masterGain.connect(this.ctx.destination);
+  this.masterGain = this.ctx.createGain();
+  this.masterGain.gain.value = 1;
+  this.masterGain.connect(this.ctx.destination);
 
-    // IMPROVEMENT 6: attach gesture-driven resume listener before anything else
-    this._attachResumeListener();
+  this._attachResumeListener();
 
-    if (this.ctx.state === 'suspended') {
-      try { await this.ctx.resume(); } catch (_) {}
-    }
-
-    // IMPROVEMENT 2: preload all noise loops during init so playLayer is instant
-    await this._preloadAll();
+  if (this.ctx.state === 'suspended') {
+    try { await this.ctx.resume(); } catch (_) {}
   }
+
+  await this._preloadAll();
+}
 
   // ─── IMPROVEMENT 6: safe one-shot resume on user gesture ─────────────────
   _attachResumeListener() {
@@ -84,13 +83,16 @@ export class MobileAudioEngine {
 
   // ─── IMPROVEMENT 2: preload all loops in parallel ────────────────────────
   async _preloadAll() {
-    const promises = Object.keys(NOISE_URLS).map(type =>
-      this._loadBuffer(type).catch(err => {
-        console.warn(`[MobileAudioEngine] preload failed for ${type}:`, err);
-      })
-    );
-    await Promise.all(promises);
-  }
+
+  const promises = Object.entries(NOISE_URLS).map(([type]) =>
+    this._loadBuffer(type)
+  );
+
+  await Promise.all(promises);
+
+  console.log("MobileAudioEngine: all noise buffers ready");
+
+}
 
   // ─── BUFFER LOADER — IMPROVEMENT 1: module-level cache ───────────────────
   async _loadBuffer(type) {
@@ -102,6 +104,12 @@ export class MobileAudioEngine {
       const res    = await fetch(url);
       const arr    = await res.arrayBuffer();
       const buffer = await this.ctx.decodeAudioData(arr);
+      // warm up buffer so first playback is instant
+const src = this.ctx.createBufferSource();
+src.buffer = buffer;
+src.connect(this.ctx.destination);
+src.start(0);
+src.stop(this.ctx.currentTime + 0.001);
 
       const MAX_SEGMENT  = 120;
       const playDuration = Math.min(buffer.duration, MAX_SEGMENT);
@@ -122,15 +130,19 @@ export class MobileAudioEngine {
   // IMPROVEMENT 5: guard at top — no restart if already running
   playLayer(type, volume = 70) {
     const ctx = this.ctx;
-    if (!ctx || ctx.state === 'closed') return;
-    if (this.layers[type]) return; // IMPROVEMENT 5: already running, skip
+if (!ctx || ctx.state === 'closed') return;
+if (this.layers[type]) return;
 
-    if (ctx.state === 'suspended') {
-      ctx.resume().then(() => {
-        if (!this.layers[type]) this.playLayer(type, volume);
-      });
-      return;
+// si no está running todavía, reintenta de forma segura
+if (ctx.state !== 'running') {
+  ctx.resume().then(() => {
+    if (this.ctx !== ctx) return;
+    if (!this.layers[type] && ctx.state === 'running') {
+      this.playLayer(type, volume);
     }
+  }).catch(() => {});
+  return;
+}
 
     const gain1      = ctx.createGain();
     const gain2      = ctx.createGain();
@@ -166,7 +178,9 @@ export class MobileAudioEngine {
     const makeSource = (gainNode) => {
       const src  = ctx.createBufferSource();
       src.buffer = state.buffer;
-      src.loop   = false;
+      src.loop = true;
+src.loopStart = state.trimStart;
+src.loopEnd = state.trimStart + state.playDuration;
       src.connect(gainNode);
       return src;
     };
@@ -313,6 +327,7 @@ export class MobileAudioEngine {
     }
     this.ctx    = null;
     this.layers = {};
+    this.gainNodes = {};
   }
 
   // ─── MASTER VOLUME ───────────────────────────────────────────────────────

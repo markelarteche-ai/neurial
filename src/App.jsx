@@ -350,6 +350,27 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
   // CAMBIO 2: MobileAudioEngine ref
   const mobileEngineRef = useRef(null);
 
+  useEffect(() => {
+
+  if (!isMobile) return;
+
+  const preload = async () => {
+
+    let engine = mobileEngineRef.current;
+
+if (!engine) {
+  engine = new MobileAudioEngine();
+  await engine.init();
+}
+
+mobileEngineRef.current = engine;
+
+  };
+
+  preload();
+
+}, []);
+
   const NT = { translate: 'no', className: 'notranslate' };
 
   const [layers, setLayers] = useState({
@@ -517,6 +538,7 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
   if (!isMobile || !isPlaying || !mobileEngineRef.current) return;
 
   const engine = mobileEngineRef.current;
+  
 
   Object.entries(layers).forEach(([type, cfg]) => {
 
@@ -758,6 +780,7 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
   };
 
   // CAMBIO 4: handleNatureToggle uses mobile ctx
+  
   const handleNatureToggle = (soundKey, checked) => {
     setNatureSounds(prev => ({ ...prev, [soundKey]: { ...prev[soundKey], enabled: checked } }));
     if (checked) {
@@ -778,10 +801,15 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
 
   const play = async () => {
     const now = Date.now();
-    if (now - lastPlayTimestamp.current < 1000) return;
-    lastPlayTimestamp.current = now;
-    if (isTransitioning) return;
-    if (isPlaying) return stopSound();
+if (now - lastPlayTimestamp.current < 700) return;
+lastPlayTimestamp.current = now;
+
+if (isTransitioning) return;
+
+if (isPlaying) {
+  stopSound();
+  return;
+}
 
     setIsTransitioning(true);
     if (!workletLoadedRef.current) setIsGenerating(true);
@@ -789,23 +817,44 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
     try {
       // CAMBIO 5: mobile path
       if (isMobile) {
-        const engine = new MobileAudioEngine();
-        await engine.init();
-        mobileEngineRef.current = engine;
-        Object.entries(layers).forEach(([type, cfg]) => {
-          if (cfg.intensity > 0) {
-            const gain = (cfg.intensity / 100) * (cfg.volume / 100) * 100;
-            engine.playLayer(type, gain);
-          }
-        });
-        setIsPlaying(true);
-        isPlayingRef.current = true;
-        if (isLimited) startLimitTimer();
-        startAllEnabledNatureSounds();
-        setIsGenerating(false);
-        setIsTransitioning(false);
-        return;
-      }
+
+  // si había un engine anterior medio vivo, destruirlo primero
+  if (mobileEngineRef.current) {
+    try {
+      await mobileEngineRef.current.destroy();
+    } catch {}
+    mobileEngineRef.current = null;
+  }
+
+  const engine = new MobileAudioEngine();
+  await engine.init();
+
+  // asegurar resume real justo antes de reproducir
+  if (engine.ctx && engine.ctx.state === 'suspended') {
+    try {
+      await engine.ctx.resume();
+    } catch {}
+  }
+
+  mobileEngineRef.current = engine;
+
+  Object.entries(layers).forEach(([type, cfg]) => {
+    if (cfg.volume > 0) {
+      engine.playLayer(type, cfg.volume);
+    }
+  });
+
+  setIsPlaying(true);
+  isPlayingRef.current = true;
+
+  if (isLimited) startLimitTimer();
+
+  startAllEnabledNatureSounds();
+
+  setIsGenerating(false);
+  setIsTransitioning(false);
+  return;
+}
 
       // Desktop path (unchanged)
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
@@ -890,19 +939,30 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
   const stopSound = () => {
     // CAMBIO 6: mobile path
     if (isMobile) {
-      pauseLimitTimer();
-      const engine = mobileEngineRef.current;
-      if (engine) {
-        engine.fadeOut(0.1);
-        setTimeout(async () => { engine.stopAll(); await engine.destroy(); mobileEngineRef.current = null; }, 200);
-      }
-      killAllNatureNow();
-      setIsPlaying(false);
-      isPlayingRef.current = false;
-      setIsTransitioning(false);
-      setIsGenerating(false);
-      return;
+  pauseLimitTimer();
+
+  const engine = mobileEngineRef.current;
+  mobileEngineRef.current = null;
+
+  killAllNatureNow();
+
+  setIsPlaying(false);
+  isPlayingRef.current = false;
+  setIsGenerating(false);
+  setIsTransitioning(true);
+
+  (async () => {
+    if (engine) {
+      try { engine.fadeOut(0.08); } catch {}
+      await new Promise(resolve => setTimeout(resolve, 120));
+      try { engine.stopAll(); } catch {}
+      try { await engine.destroy(); } catch {}
     }
+    setIsTransitioning(false);
+  })();
+
+  return;
+}
 
     // Desktop path (unchanged)
     pauseLimitTimer();
@@ -1320,189 +1380,253 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
   };
 
   const PRESETS = {
-    DeepSleep: {
-      layers: {
-        pink:  { intensity: 62, volume: 55,  texture: 18, bass: 50, brightness: 50 },
-        brown: { intensity: 100, volume: 87, texture: 15, bass: 50, brightness: 50 },
-        grey:  { intensity: 100, volume: 87, texture: 15, bass: 50, brightness: 50 },
-      },
-      brainwaves: {},
-      natureSounds: { storm: { enabled: true, volume: 7 } },
-      processing: { bass: 50, treble: 55, mid: 55, stereoWidth: 120, pressure: 50, stereoDecorr: 35 }
+  DeepSleep: {
+    layers: {
+      pink:  { intensity: 62, volume: 55,  texture: 18, bass: 50, brightness: 50 },
+      brown: { intensity: 100, volume: 87, texture: 15, bass: 50, brightness: 50 },
+      grey:  { intensity: 100, volume: 87, texture: 15, bass: 50, brightness: 50 },
     },
-    CalmMind: {
-      layers: {
-        pink:  { intensity: 48, volume: 44,  texture: 22, bass: 50, brightness: 50 },
-        brown: { intensity: 87, volume: 100, texture: 14, bass: 50, brightness: 50 },
-        grey:  { intensity: 50, volume: 83,  texture: 18, bass: 50, brightness: 50 },
-        green: { intensity: 46, volume: 60,  texture: 26, bass: 50, brightness: 50 },
-      },
-      brainwaves: { alpha: { enabled: true, carrier: 180, beat: 10, intensity: 14 } },
-      natureSounds: { rain: { enabled: true, volume: 1 } },
-      processing: { bass: 50, treble: 55, mid: 55, stereoWidth: 120, pressure: 50, stereoDecorr: 35 }
-    },
-    DeepFocus: {
-      layers: {
-        white: { intensity: 46, volume: 42,  texture: 18, bass: 50, brightness: 50 },
-        pink:  { intensity: 50, volume: 100, texture: 16, bass: 50, brightness: 50 },
-        brown: { intensity: 87, volume: 100, texture: 50, bass: 50, brightness: 50 },
-        blue:  { intensity: 50, volume: 100, texture: 24, bass: 50, brightness: 50 },
-      },
-      brainwaves: { beta: { enabled: true, carrier: 220, beat: 13, intensity: 16 } },
-      natureSounds: {},
-      processing: { bass: 50, treble: 55, mid: 55, stereoWidth: 120, pressure: 50, stereoDecorr: 35 }
-    },
-    ADHDSupport: {
-      layers: {
-        white: { intensity: 38, volume: 100, texture: 20, bass: 50, brightness: 50 },
-        pink:  { intensity: 44, volume: 40,  texture: 24, bass: 50, brightness: 50 },
-        brown: { intensity: 90, volume: 100, texture: 18, bass: 50, brightness: 50 },
-        green: { intensity: 64, volume: 100, texture: 30, bass: 50, brightness: 50 },
-      },
-      brainwaves: {},
-      natureSounds: { rain: { enabled: true, volume: 4 } },
-      processing: { bass: 50, treble: 55, mid: 55, stereoWidth: 120, pressure: 50, stereoDecorr: 35 }
-    },
-    MeditationFlow: {
-      layers: {
-        pink:  { intensity: 78,  volume: 100, texture: 22, bass: 50, brightness: 50 },
-        brown: { intensity: 100, volume: 100, texture: 16, bass: 50, brightness: 50 },
-        green: { intensity: 87,  volume: 100, texture: 30, bass: 50, brightness: 50 },
-      },
-      brainwaves: { theta: { enabled: true, carrier: 160, beat: 6, intensity: 14 } },
-      natureSounds: {},
-      processing: { bass: 50, treble: 55, mid: 55, stereoWidth: 120, pressure: 50, stereoDecorr: 35 }
-    },
-    TinnitusMasking: {
-      layers: {
-        white:  { intensity: 100, volume: 100, texture: 100, bass: 50, brightness: 50 },
-        blue:   { intensity: 100, volume: 100, texture: 100, bass: 50, brightness: 50 },
-        violet: { intensity: 100, volume: 100, texture: 100, bass: 50, brightness: 50 },
-      },
-      brainwaves: {},
-      natureSounds: { waterfall: { enabled: true, volume: 50 } },
-      processing: { bass: 50, treble: 55, mid: 55, stereoWidth: 120, pressure: 50, stereoDecorr: 35 }
-    },
-    DeepSpace: {
-      layers: {
-        pink:  { intensity: 72,  volume: 100, texture: 12,  bass: 50, brightness: 50 },
-        brown: { intensity: 100, volume: 100, texture: 55,  bass: 50, brightness: 50 },
-        blue:  { intensity: 71,  volume: 100, texture: 28,  bass: 50, brightness: 50 },
-        black: { intensity: 100, volume: 100, texture: 100, bass: 50, brightness: 50 },
-      },
-      brainwaves: { theta: { enabled: true, carrier: 150, beat: 5, intensity: 12 } },
-      natureSounds: {},
-      processing: { bass: 50, treble: 55, mid: 55, stereoWidth: 120, pressure: 50, stereoDecorr: 35 }
-    },
-    MentalReset: {
-      layers: {
-        white: { intensity: 45,  volume: 100, texture: 18, bass: 50, brightness: 50 },
-        pink:  { intensity: 46,  volume: 100, texture: 22, bass: 50, brightness: 50 },
-        brown: { intensity: 100, volume: 100, texture: 14, bass: 50, brightness: 50 },
-        blue:  { intensity: 100, volume: 100, texture: 69, bass: 50, brightness: 50 },
-        green: { intensity: 75,  volume: 100, texture: 30, bass: 50, brightness: 50 },
-      },
-      brainwaves: {},
-      natureSounds: { wind: { enabled: true, volume: 40 } },
-      processing: { bass: 50, treble: 55, mid: 55, stereoWidth: 120, pressure: 50, stereoDecorr: 35 }
-    },
-  };
+    brainwaves: {},
+    natureSounds: { storm: { enabled: true, volume: 7 } },
+    processing: { bass: 50, treble: 55, mid: 55, stereoWidth: 120, pressure: 50, stereoDecorr: 35 }
+  },
 
-  const applyPreset = async (k) => {
-    if (isApplyingPresetRef.current) return;
-    isApplyingPresetRef.current = true;
+  CalmMind: {
+    layers: {
+      pink:  { intensity: 48, volume: 44,  texture: 22, bass: 50, brightness: 50 },
+      brown: { intensity: 87, volume: 100, texture: 14, bass: 50, brightness: 50 },
+      grey:  { intensity: 50, volume: 83,  texture: 18, bass: 50, brightness: 50 },
+      green: { intensity: 46, volume: 60,  texture: 26, bass: 50, brightness: 50 },
+    },
+    brainwaves: { alpha: { enabled: true, carrier: 180, beat: 10, intensity: 14 } },
+    natureSounds: { rain: { enabled: true, volume: 1 } },
+    processing: { bass: 50, treble: 55, mid: 55, stereoWidth: 120, pressure: 50, stereoDecorr: 35 }
+  },
 
-    const p = PRESETS[k];
-    if (!p) {
-      isApplyingPresetRef.current = false;
-      return;
-    }
+  DeepFocus: {
+    layers: {
+      white: { intensity: 46, volume: 42,  texture: 18, bass: 50, brightness: 50 },
+      pink:  { intensity: 50, volume: 100, texture: 16, bass: 50, brightness: 50 },
+      brown: { intensity: 87, volume: 100, texture: 50, bass: 50, brightness: 50 },
+      blue:  { intensity: 50, volume: 100, texture: 24, bass: 50, brightness: 50 },
+    },
+    brainwaves: { beta: { enabled: true, carrier: 220, beat: 13, intensity: 16 } },
+    natureSounds: {},
+    processing: { bass: 50, treble: 55, mid: 55, stereoWidth: 120, pressure: 50, stereoDecorr: 35 }
+  },
 
-    if (activePreset === k) {
-      setActivePreset(null);
-      setLayers((prev) => {
-        const resetLayers = {};
-        Object.keys(prev).forEach((layerKey) => { resetLayers[layerKey] = { intensity: 0, bass: 50, volume: 100, texture: 50, brightness: 50 }; });
-        return resetLayers;
-      });
-      setBrainwaves((prev) => {
-        const resetWaves = {};
-        Object.keys(prev).forEach((waveKey) => { resetWaves[waveKey] = { ...prev[waveKey], enabled: false }; });
-        return resetWaves;
-      });
-      setProcessing({ bass: 50, treble: 55, mid: 55, stereoWidth: 120, pressure: 50, stereoDecorr: 35, harmonicSat: 0, spectralDrift: 0, temporalSmooth: 0, layerInteract: 0, microRandom: 0 });
-      killAllNatureNow();
-      setNatureSounds(prev => {
-        const reset = {};
-        Object.keys(prev).forEach(sk => { reset[sk] = { ...prev[sk], enabled: false }; });
-        return reset;
-      });
-      if (isPlaying) play();
-      setTimeout(() => { isApplyingPresetRef.current = false; }, 600);
-      return;
-    }
+  ADHDSupport: {
+    layers: {
+      white: { intensity: 38, volume: 100, texture: 20, bass: 50, brightness: 50 },
+      pink:  { intensity: 44, volume: 40,  texture: 24, bass: 50, brightness: 50 },
+      brown: { intensity: 90, volume: 100, texture: 18, bass: 50, brightness: 50 },
+      green: { intensity: 64, volume: 100, texture: 30, bass: 50, brightness: 50 },
+    },
+    brainwaves: {},
+    natureSounds: { rain: { enabled: true, volume: 4 } },
+    processing: { bass: 50, treble: 55, mid: 55, stereoWidth: 120, pressure: 50, stereoDecorr: 35 }
+  },
 
-    setActivePreset(k);
-    setLayers((prev) => {
-      const resetLayers = {};
-      Object.keys(prev).forEach((layerKey) => { resetLayers[layerKey] = { intensity: 0, bass: 50, volume: 100, texture: 50, brightness: 50 }; });
-      return resetLayers;
-    });
-    setBrainwaves((prev) => {
-      const resetWaves = {};
-      Object.keys(prev).forEach((waveKey) => { resetWaves[waveKey] = { ...prev[waveKey], enabled: false }; });
-      return resetWaves;
-    });
-    setProcessing({ bass: 50, treble: 55, mid: 55, stereoWidth: 120, pressure: 50, stereoDecorr: 35, harmonicSat: 0, spectralDrift: 0, temporalSmooth: 0, layerInteract: 0, microRandom: 0 });
+  MeditationFlow: {
+    layers: {
+      pink:  { intensity: 78,  volume: 100, texture: 22, bass: 50, brightness: 50 },
+      brown: { intensity: 100, volume: 100, texture: 16, bass: 50, brightness: 50 },
+      green: { intensity: 87,  volume: 100, texture: 30, bass: 50, brightness: 50 },
+    },
+    brainwaves: { theta: { enabled: true, carrier: 160, beat: 6, intensity: 14 } },
+    natureSounds: {},
+    processing: { bass: 50, treble: 55, mid: 55, stereoWidth: 120, pressure: 50, stereoDecorr: 35 }
+  },
 
-    killAllNatureNow();
-    setNatureSounds(prev => {
+  TinnitusMasking: {
+    layers: {
+      white:  { intensity: 100, volume: 100, texture: 100, bass: 50, brightness: 50 },
+      blue:   { intensity: 100, volume: 100, texture: 100, bass: 50, brightness: 50 },
+      violet: { intensity: 100, volume: 100, texture: 100, bass: 50, brightness: 50 },
+    },
+    brainwaves: {},
+    natureSounds: { waterfall: { enabled: true, volume: 50 } },
+    processing: { bass: 50, treble: 55, mid: 55, stereoWidth: 120, pressure: 50, stereoDecorr: 35 }
+  },
+
+  DeepSpace: {
+    layers: {
+      pink:  { intensity: 72,  volume: 100, texture: 12,  bass: 50, brightness: 50 },
+      brown: { intensity: 100, volume: 100, texture: 55,  bass: 50, brightness: 50 },
+      blue:  { intensity: 71,  volume: 100, texture: 28,  bass: 50, brightness: 50 },
+      black: { intensity: 100, volume: 100, texture: 100, bass: 50, brightness: 50 },
+    },
+    brainwaves: { theta: { enabled: true, carrier: 150, beat: 5, intensity: 12 } },
+    natureSounds: {},
+    processing: { bass: 50, treble: 55, mid: 55, stereoWidth: 120, pressure: 50, stereoDecorr: 35 }
+  },
+
+  MentalReset: {
+    layers: {
+      white: { intensity: 45,  volume: 100, texture: 18, bass: 50, brightness: 50 },
+      pink:  { intensity: 46,  volume: 100, texture: 22, bass: 50, brightness: 50 },
+      brown: { intensity: 100, volume: 100, texture: 14, bass: 50, brightness: 50 },
+      blue:  { intensity: 100, volume: 100, texture: 69, bass: 50, brightness: 50 },
+      green: { intensity: 75,  volume: 100, texture: 30, bass: 50, brightness: 50 },
+    },
+    brainwaves: {},
+    natureSounds: { wind: { enabled: true, volume: 40 } },
+    processing: { bass: 50, treble: 55, mid: 55, stereoWidth: 120, pressure: 50, stereoDecorr: 35 }
+  },
+};
+
+const applyPreset = async (k) => {
+
+  if (isApplyingPresetRef.current) return;
+  isApplyingPresetRef.current = true;
+
+  const p = PRESETS[k];
+  if (!p) {
+    isApplyingPresetRef.current = false;
+    return;
+  }
+
+  const resetLayer = () => ({
+    intensity: 0,
+    bass: 50,
+    volume: isMobile ? 0 : 100,
+    texture: 50,
+    brightness: 50
+  });
+
+  if (activePreset === k) {
+
+    setActivePreset(null);
+
+    setLayers(prev => {
       const reset = {};
-      Object.keys(prev).forEach(sk => { reset[sk] = { ...prev[sk], enabled: false }; });
+      Object.keys(prev).forEach(k => reset[k] = resetLayer());
       return reset;
     });
 
-    setTimeout(() => {
-      setLayers((prev) => {
-        const newLayers = { ...prev };
-        Object.keys(newLayers).forEach((layerKey) => {
-          newLayers[layerKey] = p.layers?.[layerKey] || { intensity: 0, bass: 50, volume: 100, texture: 50, brightness: 50 };
-        });
-        return newLayers;
-      });
-      setBrainwaves((prev) => {
-        const merged = { ...prev };
-        Object.keys(merged).forEach((waveKey) => { merged[waveKey] = { ...merged[waveKey], enabled: false }; });
-        if (p.brainwaves) {
-          Object.keys(p.brainwaves).forEach((waveKey) => {
-            if (merged[waveKey]) merged[waveKey] = { ...merged[waveKey], ...p.brainwaves[waveKey] };
-          });
-        }
-        return merged;
-      });
-      setProcessing((prev) => ({ ...prev, ...(p.processing || {}) }));
+    setBrainwaves(prev => {
+      const reset = {};
+      Object.keys(prev).forEach(k => reset[k] = { ...prev[k], enabled:false });
+      return reset;
+    });
 
-      if (p.natureSounds) {
-        setNatureSounds(prev => {
-          const next = { ...prev };
-          Object.keys(p.natureSounds).forEach(sk => {
-            if (next[sk]) next[sk] = { ...next[sk], ...p.natureSounds[sk] };
-          });
-          return next;
-        });
-        if (isPlayingRef.current) {
-          Object.entries(p.natureSounds).forEach(([sk, cfg]) => {
-            if (cfg.enabled && !natureAudioRefs.current[sk]) {
-              startNatureSound(sk, cfg.volume ?? 70);
-            }
-          });
+    killAllNatureNow();
+
+    setNatureSounds(prev=>{
+      const reset = {};
+      Object.keys(prev).forEach(k=>reset[k]={...prev[k],enabled:false});
+      return reset;
+    });
+
+    if (isPlaying) play();
+
+    setTimeout(()=>{ isApplyingPresetRef.current=false },600);
+    return;
+  }
+
+  setActivePreset(k);
+
+  setLayers(prev=>{
+    const reset={};
+    Object.keys(prev).forEach(k=>reset[k]=resetLayer());
+    return reset;
+  });
+
+  setTimeout(()=>{
+
+    setLayers(prev=>{
+      const next={...prev};
+
+      Object.keys(next).forEach(layerKey=>{
+
+        const presetLayer = p.layers?.[layerKey];
+
+        if(!presetLayer){
+          next[layerKey] = resetLayer();
+          return;
         }
+
+        if(isMobile){
+
+          next[layerKey] = {
+            ...prev[layerKey],
+            volume: presetLayer.intensity || 0
+          };
+
+        }else{
+
+          next[layerKey] = presetLayer;
+
+        }
+
+      });
+
+      return next;
+
+    });
+
+    setBrainwaves(prev=>{
+      const merged={...prev};
+      Object.keys(merged).forEach(k=>merged[k]={...merged[k],enabled:false});
+      if(p.brainwaves){
+        Object.keys(p.brainwaves).forEach(k=>{
+          if(merged[k]) merged[k]={...merged[k],...p.brainwaves[k]};
+        });
+      }
+      return merged;
+    });
+
+    if (p.natureSounds) {
+
+  // MOBILE: detener todos los sonidos activos antes de aplicar preset
+  if (isMobile) {
+    Object.keys(natureAudioRefs.current).forEach(sk => {
+      stopNatureSoundImperative(sk, true);
+    });
+  }
+
+  // reset completo y aplicar solo los del preset
+  setNatureSounds(prev => {
+
+    const next = {};
+
+    Object.keys(prev).forEach(sk => {
+
+      const presetSound = p.natureSounds?.[sk];
+
+      if (presetSound) {
+        next[sk] = { ...prev[sk], ...presetSound };
+      } else {
+        next[sk] = { ...prev[sk], enabled: false };
       }
 
-      if (!isPlaying) play();
-      setTimeout(() => { isApplyingPresetRef.current = false; }, 600);
-    }, 150);
-  };
+    });
+
+    return next;
+
+  });
+
+  if (isPlayingRef.current) {
+
+    Object.entries(p.natureSounds).forEach(([sk, cfg]) => {
+
+      if (cfg.enabled) {
+        startNatureSound(sk, cfg.volume ?? 70);
+      }
+
+    });
+
+  }
+
+}
+
+    if(!isPlaying) play();
+
+    setTimeout(()=>{ isApplyingPresetRef.current=false },600);
+
+  },150);
+
+};
 
   const getLayerDesc = (k) => {
     const d = {
