@@ -363,12 +363,21 @@ const brainwaveGainRefs = useRef({});
 
     let engine = mobileEngineRef.current;
 
-if (!engine) {
-  engine = new MobileAudioEngine();
-  await engine.init();
-}
+    if (!engine) {
+      engine = new MobileAudioEngine();
+      await engine.init();
+    }
 
-mobileEngineRef.current = engine;
+    mobileEngineRef.current = engine;
+
+    const ctx = engine?.ctx;
+    if (!ctx) return;
+
+    const keys = Object.keys(NATURE_SOUND_URLS);
+
+    await Promise.all(
+      keys.map(k => loadNatureBufferRealtime(ctx, k))
+    );
 
   };
 
@@ -542,61 +551,69 @@ mobileEngineRef.current = engine;
 
   if (!isMobile) return;
 
-  const ctx = mobileEngineRef.current?.ctx;
-  if (!ctx) return;
+  async function initBrainwavesMobile(){
 
-  Object.entries(brainwaves).forEach(([type, cfg]) => {
+    const ctx = mobileEngineRef.current?.ctx;
+    if (!ctx) return;
 
-    if (cfg.enabled) {
+    await preloadNatureSounds();
 
-      if (!brainwaveOscRefs.current[type]) {
+    Object.entries(brainwaves).forEach(([type, cfg]) => {
 
-        const oscL = ctx.createOscillator();
-        const oscR = ctx.createOscillator();
+      if (cfg.enabled) {
 
-        const gain = ctx.createGain();
+        if (!brainwaveOscRefs.current[type]) {
 
-        const panL = ctx.createStereoPanner();
-        const panR = ctx.createStereoPanner();
+          const oscL = ctx.createOscillator();
+          const oscR = ctx.createOscillator();
 
-        panL.pan.value = -1;
-        panR.pan.value = 1;
+          const gain = ctx.createGain();
 
-        oscL.frequency.value = cfg.carrier;
-        oscR.frequency.value = cfg.carrier + cfg.beat;
+          const panL = ctx.createStereoPanner();
+          const panR = ctx.createStereoPanner();
 
-        gain.gain.value = (cfg.intensity / 100) * 0.2;
+          panL.pan.value = -1;
+          panR.pan.value = 1;
 
-        oscL.connect(panL).connect(gain);
-        oscR.connect(panR).connect(gain);
+          oscL.frequency.value = cfg.carrier;
+          oscR.frequency.value = cfg.carrier + cfg.beat;
 
-        gain.connect(ctx.destination);
+          gain.gain.value = (cfg.intensity / 100) * 0.2;
 
-        oscL.start();
-        oscR.start();
+          oscL.connect(panL).connect(gain);
+          oscR.connect(panR).connect(gain);
 
-        brainwaveOscRefs.current[type] = { oscL, oscR };
-        brainwaveGainRefs.current[type] = gain;
+          gain.connect(ctx.destination);
+
+          oscL.start();
+          oscR.start();
+
+          brainwaveOscRefs.current[type] = { oscL, oscR };
+          brainwaveGainRefs.current[type] = gain;
+
+        }
+
+      } else {
+
+        const osc = brainwaveOscRefs.current[type];
+
+        if (osc) {
+
+          osc.oscL.stop();
+          osc.oscR.stop();
+
+          delete brainwaveOscRefs.current[type];
+          delete brainwaveGainRefs.current[type];
+
+        }
 
       }
 
-    } else {
+    });
 
-      const osc = brainwaveOscRefs.current[type];
+  }
 
-      if (osc) {
-
-        osc.oscL.stop();
-        osc.oscR.stop();
-
-        delete brainwaveOscRefs.current[type];
-        delete brainwaveGainRefs.current[type];
-
-      }
-
-    }
-
-  });
+  initBrainwavesMobile();
 
 }, [brainwaves]);
 
