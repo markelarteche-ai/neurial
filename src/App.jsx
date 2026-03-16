@@ -1,5 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Play, Square, Download, Waves } from 'lucide-react';
+import { MobileAudioEngine } from './audio/MobileAudioEngine';
+
+const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
 // ===================== EXPORT PROGRESS BAR =====================
 const ExportProgressBar = ({ exportProgress, formatTime, NT }) => {
@@ -344,6 +347,8 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
   const natureAudioRefs    = useRef({});
   const natureGainNodes    = useRef({});
   const natureBufferCacheRef = useRef({});
+  // CAMBIO 2: MobileAudioEngine ref
+  const mobileEngineRef = useRef(null);
 
   const NT = { translate: 'no', className: 'notranslate' };
 
@@ -422,8 +427,6 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
     const node = mixerNodeRef.current;
     if (!ctx || !node || ctx.state !== 'running') return;
     const t = ctx.currentTime;
-    // 0.05 timeConstant (~50ms) eliminates zipper noise on mobile
-    // where audio buffers are larger and parameter jumps are more audible
     const TC = 0.05;
 
     Object.entries(layers).forEach(([k, c]) => {
@@ -475,7 +478,6 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
     return f;
   };
 
-  // Send a single param directly to worklet with smooth ramp - avoids zipper noise on mobile
   const sendParam = (name, value) => {
     const node = mixerNodeRef.current;
     const ctx = audioContextRef.current;
@@ -488,7 +490,6 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
     if (!isPlaying) return;
     const ctx = audioContextRef.current;
     if (!ctx) return;
-    // Throttle to max once every 30ms to avoid zipper noise from rapid slider moves on mobile
     if (syncThrottleRef.current) clearTimeout(syncThrottleRef.current);
     syncThrottleRef.current = setTimeout(() => {
       syncAllRealtimeParams(ctx);
@@ -510,6 +511,20 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
     natureSounds.wind.volume, natureSounds.fire.volume, natureSounds.waterfall.volume,
     natureSounds.river.volume, natureSounds.nightforest.volume, natureSounds.nightingale.volume
   ]);
+
+  // CAMBIO 3: sync mobile layers on change
+  useEffect(() => {
+    if (!isMobile || !isPlaying || !mobileEngineRef.current) return;
+    const engine = mobileEngineRef.current;
+    Object.entries(layers).forEach(([type, cfg]) => {
+      if (cfg.intensity > 0) {
+        if (!engine.layers[type]) engine.playLayer(type, (cfg.intensity / 100) * (cfg.volume / 100));
+        else engine.setLayerGain(type, cfg.intensity, cfg.volume);
+      } else {
+        if (engine.layers[type]) engine.stopLayer(type);
+      }
+    });
+  }, [layers, isPlaying]);
 
   const natureLoadingRef = useRef({});
 
@@ -537,14 +552,16 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
     return promise;
   };
 
+  // CAMBIO 4: startNatureSound uses mobile ctx when on mobile
   const startNatureSound = (soundKey, volume) => {
-    const ctx = audioContextRef.current;
+    const ctx = isMobile ? mobileEngineRef.current?.ctx : audioContextRef.current;
+    const destination = isMobile ? mobileEngineRef.current?.masterGain : (gainNodeRef.current ?? ctx?.destination);
     if (!ctx || ctx.state === 'closed') return;
     if (natureAudioRefs.current[soundKey]) return;
 
     if (ctx.state === 'suspended') {
       ctx.resume().then(() => {
-        if (!natureAudioRefs.current[soundKey] && audioContextRef.current === ctx) {
+        if (!natureAudioRefs.current[soundKey] && (isMobile ? mobileEngineRef.current?.ctx : audioContextRef.current) === ctx) {
           startNatureSound(soundKey, natureSoundsRef.current[soundKey]?.volume ?? volume);
         }
       }).catch(err => console.error('ctx.resume failed:', err));
@@ -556,10 +573,9 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
     const masterGain = ctx.createGain();
     masterGain.gain.value = volume / 100;
 
-    const destination = gainNodeRef.current ?? ctx.destination;
     gain1.connect(masterGain);
     gain2.connect(masterGain);
-    masterGain.connect(destination);
+    masterGain.connect(destination ?? ctx.destination);
 
     gain1.gain.value = 1;
     gain2.gain.value = 0;
@@ -650,7 +666,6 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
           startPlayer(1, t0);
           scheduleNextCrossfade(t0, 1);
         };
-        // Always try resume first on mobile — context may have been suspended after fetch/decode
         ctx.resume().then(schedulePlay).catch(() => schedulePlay());
       })
       .catch(err => {
@@ -667,7 +682,7 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
     st._killedByUser = true;
     if (st.timerId) clearTimeout(st.timerId);
 
-    const ctx = audioContextRef.current;
+    const ctx = isMobile ? mobileEngineRef.current?.ctx : audioContextRef.current;
     const now = ctx?.currentTime ?? 0;
 
     if (immediate) {
@@ -726,10 +741,11 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
     });
   };
 
+  // CAMBIO 4: handleNatureToggle uses mobile ctx
   const handleNatureToggle = (soundKey, checked) => {
     setNatureSounds(prev => ({ ...prev, [soundKey]: { ...prev[soundKey], enabled: checked } }));
     if (checked) {
-      const ctx = audioContextRef.current;
+      const ctx = isMobile ? mobileEngineRef.current?.ctx : audioContextRef.current;
       if (ctx && ctx.state !== 'closed' && !natureAudioRefs.current[soundKey]) {
         const currentVolume = natureSoundsRef.current[soundKey]?.volume ?? 70;
         startNatureSound(soundKey, currentVolume);
@@ -755,12 +771,27 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
     if (!workletLoadedRef.current) setIsGenerating(true);
 
     try {
-      // Create context immediately inside user gesture (critical for iOS/Android)
+      // CAMBIO 5: mobile path
+      if (isMobile) {
+        const engine = new MobileAudioEngine();
+        await engine.init();
+        mobileEngineRef.current = engine;
+        Object.entries(layers).forEach(([type, cfg]) => {
+          if (cfg.intensity > 0) engine.playLayer(type, (cfg.intensity / 100) * (cfg.volume / 100));
+        });
+        setIsPlaying(true);
+        isPlayingRef.current = true;
+        if (isLimited) startLimitTimer();
+        startAllEnabledNatureSounds();
+        setIsGenerating(false);
+        setIsTransitioning(false);
+        return;
+      }
+
+      // Desktop path (unchanged)
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
       const ctx = new AudioCtx({ latencyHint: 'interactive', sampleRate: 44100, channelCount: 2 });
 
-      // iOS requires resume() synchronously inside the gesture handler
-      // We call it before any await to satisfy the user-gesture requirement
       if (ctx.state === 'suspended') {
         await ctx.resume();
       }
@@ -774,7 +805,6 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
       await ctx.audioWorklet.addModule('/realtime-engine.worklet.js');
       workletLoadedRef.current = true;
 
-      // After addModule (which is async), iOS may have suspended again — resume again
       if (ctx.state === 'suspended') {
         await ctx.resume();
       }
@@ -792,13 +822,10 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
       engine.connect(f.inGain);
       masterGain.connect(ctx.destination);
 
-      // Final resume check — some Android browsers need this
       if (ctx.state === 'suspended') {
         await ctx.resume();
       }
 
-      // Force ALL layer intensities directly via setValueAtTime (instant, no ramp)
-      // This bypasses the smoothedParams/densityRamp in the worklet on first boot
       const forceParams = () => {
         const node = mixerNodeRef.current;
         if (!node || ctx.state !== 'running') return;
@@ -812,7 +839,6 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
         if (gainNodeRef.current) gainNodeRef.current.gain.setValueAtTime(1, t);
       };
 
-      // Send warmup message to worklet so filter states prime immediately
       engine.port.postMessage({ type: 'warmup', samples: 4800 });
 
       forceParams();
@@ -830,7 +856,6 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
 
     } catch (err) {
       console.error('Play error:', err);
-      // Clean up any partial audio context on error
       try {
         if (audioContextRef.current) {
           audioContextRef.current.close();
@@ -844,6 +869,23 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
   };
 
   const stopSound = () => {
+    // CAMBIO 6: mobile path
+    if (isMobile) {
+      pauseLimitTimer();
+      const engine = mobileEngineRef.current;
+      if (engine) {
+        engine.fadeOut(0.1);
+        setTimeout(async () => { engine.stopAll(); await engine.destroy(); mobileEngineRef.current = null; }, 200);
+      }
+      killAllNatureNow();
+      setIsPlaying(false);
+      isPlayingRef.current = false;
+      setIsTransitioning(false);
+      setIsGenerating(false);
+      return;
+    }
+
+    // Desktop path (unchanged)
     pauseLimitTimer();
 
     const ctx = audioContextRef.current;
@@ -1740,10 +1782,12 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
                               <label style={{ display: 'block', fontSize: '12px', marginBottom: '8px', color: 'rgba(254,240,138,0.7)' }}>Volume: <span {...NT}>{c.volume}%</span></label>
                               <input type="range" min="0" max="100" value={c.volume} onChange={(e) => { const v = parseInt(e.target.value); setLayers(pr => ({ ...pr, [t]: { ...pr[t], volume: v } })); sendParam(`${t}_volume`, v / 100); }} />
                             </div>
-                            <div style={{ paddingBottom: '4px' }}>
-                              <label style={{ display: 'block', fontSize: '12px', marginBottom: '8px', color: 'rgba(254,240,138,0.7)' }}>Texture: <span {...NT}>{c.texture}%</span></label>
-                              <input type="range" min="0" max="100" value={c.texture} onChange={(e) => { const v = parseInt(e.target.value); setLayers(pr => ({ ...pr, [t]: { ...pr[t], texture: v } })); sendParam(`${t}_texture`, v / 100); }} />
-                            </div>
+                            {!isMobile && (
+                              <div style={{ paddingBottom: '4px' }}>
+                                <label style={{ display: 'block', fontSize: '12px', marginBottom: '8px', color: 'rgba(254,240,138,0.7)' }}>Texture: <span {...NT}>{c.texture}%</span></label>
+                                <input type="range" min="0" max="100" value={c.texture} onChange={(e) => { const v = parseInt(e.target.value); setLayers(pr => ({ ...pr, [t]: { ...pr[t], texture: v } })); sendParam(`${t}_texture`, v / 100); }} />
+                              </div>
+                            )}
                           </>
                         )}
                       </div>
