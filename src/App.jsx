@@ -339,15 +339,19 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
   };
 
   const audioContextRef = useRef(null);
-  const isApplyingPresetRef = useRef(false);
-  const mixerNodeRef = useRef(null);
-  const gainNodeRef = useRef(null);
-  const filterNodesRef = useRef({});
+const isApplyingPresetRef = useRef(false);
 
-  const natureAudioRefs    = useRef({});
-  const natureGainNodes    = useRef({});
-  const natureToggleLock = useRef(false);
-  const natureBufferCacheRef = useRef({});
+const mixerNodeRef = useRef(null);
+const gainNodeRef = useRef(null);
+const filterNodesRef = useRef({});
+
+const natureAudioRefs = useRef({});
+const natureGainNodes = useRef({});
+const natureToggleLock = useRef(false);
+const natureBufferCacheRef = useRef({});
+
+const brainwaveOscRefs = useRef({});
+const brainwaveGainRefs = useRef({});
   // CAMBIO 2: MobileAudioEngine ref
   const mobileEngineRef = useRef(null);
 
@@ -533,6 +537,68 @@ mobileEngineRef.current = engine;
     natureSounds.wind.volume, natureSounds.fire.volume, natureSounds.waterfall.volume,
     natureSounds.river.volume, natureSounds.nightforest.volume, natureSounds.nightingale.volume
   ]);
+
+  useEffect(() => {
+
+  if (!isMobile) return;
+
+  const ctx = mobileEngineRef.current?.ctx;
+  if (!ctx) return;
+
+  Object.entries(brainwaves).forEach(([type, cfg]) => {
+
+    if (cfg.enabled) {
+
+      if (!brainwaveOscRefs.current[type]) {
+
+        const oscL = ctx.createOscillator();
+        const oscR = ctx.createOscillator();
+
+        const gain = ctx.createGain();
+
+        const panL = ctx.createStereoPanner();
+        const panR = ctx.createStereoPanner();
+
+        panL.pan.value = -1;
+        panR.pan.value = 1;
+
+        oscL.frequency.value = cfg.carrier;
+        oscR.frequency.value = cfg.carrier + cfg.beat;
+
+        gain.gain.value = (cfg.intensity / 100) * 0.2;
+
+        oscL.connect(panL).connect(gain);
+        oscR.connect(panR).connect(gain);
+
+        gain.connect(ctx.destination);
+
+        oscL.start();
+        oscR.start();
+
+        brainwaveOscRefs.current[type] = { oscL, oscR };
+        brainwaveGainRefs.current[type] = gain;
+
+      }
+
+    } else {
+
+      const osc = brainwaveOscRefs.current[type];
+
+      if (osc) {
+
+        osc.oscL.stop();
+        osc.oscR.stop();
+
+        delete brainwaveOscRefs.current[type];
+        delete brainwaveGainRefs.current[type];
+
+      }
+
+    }
+
+  });
+
+}, [brainwaves]);
 
   // CAMBIO 3: sync mobile layers on change — intensity = ON/OFF, volume = loudness
   useEffect(() => {
@@ -2037,13 +2103,52 @@ const applyPreset = async (k) => {
                     <p style={{ color: '#fef08a', fontSize: '12px', margin: 0 }}>🧠 <strong>Brainwave Entrainment:</strong> Binaural beats that guide your brain into specific states. Each frequency targets different mental states for optimal results. &nbsp;·&nbsp; 🎧 Headphones enhance the binaural effect</p>
                   </div>
                   {Object.entries(brainwaves).map(([t, c]) => (
-                    <div key={t} style={{ padding: '16px', borderRadius: '8px', transition: 'all 0.3s', background: 'rgba(30,41,59,0.5)', border: '2px solid rgba(250,204,21,0.2)', overflow: 'visible', textAlign: 'left' }}>
+                    <div
+  key={t}
+  style={{
+    padding: '16px',
+    borderRadius: '8px',
+    transition: 'all 0.3s',
+    background: 'rgba(30,41,59,0.5)',
+    border: '2px solid rgba(250,204,21,0.2)',
+    overflow: 'visible',
+    textAlign: 'left',
+    cursor: 'pointer'
+  }}
+  onClick={() =>
+    setBrainwaves(pr => ({
+      ...pr,
+      [t]: { ...pr[t], enabled: !pr[t].enabled }
+    }))
+  }
+>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                        <label style={{ color: '#fef08a', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', cursor: 'pointer', textTransform: 'capitalize' }}>
-                          <input type="checkbox" checked={c.enabled} onChange={(e) => setBrainwaves(pr => ({ ...pr, [t]: { ...pr[t], enabled: e.target.checked } }))} />
-                          {t} Wave
-                        </label>
-                      </div>
+                        <label
+  style={{
+    color: '#fef08a',
+    fontWeight: 500,
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    fontSize: '14px',
+    cursor: 'pointer',
+    textTransform: 'capitalize'
+  }}
+>
+  <input
+    type="checkbox"
+    checked={c.enabled}
+    onClick={(e) => e.stopPropagation()}
+    onChange={(e) =>
+      setBrainwaves(pr => ({
+        ...pr,
+        [t]: { ...pr[t], enabled: e.target.checked }
+      }))
+    }
+  />
+  {t} Wave
+</label>
+</div>
                       <p style={{ fontSize: '12px', marginBottom: '12px', color: 'rgba(254,240,138,0.6)', margin: '0 0 12px 0' }}>{getBrainDesc(t)}</p>
                       {c.enabled && (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
