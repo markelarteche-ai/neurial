@@ -36,7 +36,7 @@ const ExportProgressBar = ({ exportProgress, formatTime, NT }) => {
 
   return (
     <div style={{
-      margin: '0 32px 24px 32px',
+      margin: isMobile ? '0 16px 24px 16px' : '0 32px 24px 32px',
       borderRadius: '16px',
       overflow: 'hidden',
       border: '1px solid rgba(250,204,21,0.25)',
@@ -150,6 +150,13 @@ const ExportProgressBar = ({ exportProgress, formatTime, NT }) => {
       }} />
     </div>
   );
+};
+
+// ===================== PRESET LABEL FORMATTER =====================
+const formatPresetName = (key) => {
+  // Handles acronyms: only inserts space between lowercase→uppercase transition
+  // ADHDSupport → "ADHD Support", DeepSleep → "Deep Sleep"
+  return key.replace(/([a-z])([A-Z])/g, '$1 $2').trim();
 };
 
 // ===================== MAIN COMPONENT =====================
@@ -339,51 +346,34 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
   };
 
   const audioContextRef = useRef(null);
-const isApplyingPresetRef = useRef(false);
-
-const mixerNodeRef = useRef(null);
-const gainNodeRef = useRef(null);
-const filterNodesRef = useRef({});
-
-const natureAudioRefs = useRef({});
-const natureGainNodes = useRef({});
-const natureToggleLock = useRef(false);
-const natureBufferCacheRef = useRef({});
-
-const brainwaveOscRefs = useRef({});
-const brainwaveGainRefs = useRef({});
-  // CAMBIO 2: MobileAudioEngine ref
+  const isApplyingPresetRef = useRef(false);
+  const mixerNodeRef = useRef(null);
+  const gainNodeRef = useRef(null);
+  const filterNodesRef = useRef({});
+  const natureAudioRefs = useRef({});
+  const natureGainNodes = useRef({});
+  const natureToggleLock = useRef(false);
+  const natureBufferCacheRef = useRef({});
+  const brainwaveOscRefs = useRef({});
+  const brainwaveGainRefs = useRef({});
   const mobileEngineRef = useRef(null);
 
   useEffect(() => {
-
-  if (!isMobile) return;
-
-  const preload = async () => {
-
-    let engine = mobileEngineRef.current;
-
-    if (!engine) {
-      engine = new MobileAudioEngine();
-      await engine.init();
-    }
-
-    mobileEngineRef.current = engine;
-
-    const ctx = engine?.ctx;
-    if (!ctx) return;
-
-    const keys = Object.keys(NATURE_SOUND_URLS);
-
-    await Promise.all(
-      keys.map(k => loadNatureBufferRealtime(ctx, k))
-    );
-
-  };
-
-  preload();
-
-}, []);
+    if (!isMobile) return;
+    const preload = async () => {
+      let engine = mobileEngineRef.current;
+      if (!engine) {
+        engine = new MobileAudioEngine();
+        await engine.init();
+      }
+      mobileEngineRef.current = engine;
+      const ctx = engine?.ctx;
+      if (!ctx) return;
+      const keys = Object.keys(NATURE_SOUND_URLS);
+      await Promise.all(keys.map(k => loadNatureBufferRealtime(ctx, k)));
+    };
+    preload();
+  }, []);
 
   const NT = { translate: 'no', className: 'notranslate' };
 
@@ -463,21 +453,18 @@ const brainwaveGainRefs = useRef({});
     if (!ctx || !node || ctx.state !== 'running') return;
     const t = ctx.currentTime;
     const TC = 0.05;
-
     Object.entries(layers).forEach(([k, c]) => {
       node.parameters.get(`${k}_intensity`)?.setTargetAtTime((c.intensity ?? 0) / 100, t, TC);
       node.parameters.get(`${k}_volume`)?.setTargetAtTime((c.volume ?? 100) / 100, t, TC);
       node.parameters.get(`${k}_bass`)?.setTargetAtTime((c.bass ?? 50) / 100, t, TC);
       node.parameters.get(`${k}_texture`)?.setTargetAtTime((c.texture ?? 50) / 100, t, TC);
     });
-
     Object.entries(brainwaves).forEach(([k, c]) => {
       node.parameters.get(`${k}_enabled`)?.setTargetAtTime(c.enabled ? 1 : 0, t, TC);
       node.parameters.get(`${k}_carrier`)?.setTargetAtTime(c.carrier ?? 200, t, TC);
       node.parameters.get(`${k}_beat`)?.setTargetAtTime(c.beat ?? 10, t, TC);
       node.parameters.get(`${k}_intensity`)?.setTargetAtTime((c.intensity ?? 50) / 100, t, TC);
     });
-
     node.parameters.get('stereoDecorr')?.setTargetAtTime((processing.stereoDecorr ?? 0) / 100, t, TC);
     node.parameters.get('stereoWidth')?.setTargetAtTime((processing.stereoWidth ?? 100) / 50, t, TC);
     node.parameters.get('harmonicSat')?.setTargetAtTime((processing.harmonicSat ?? 0) / 100, t, TC);
@@ -548,105 +535,64 @@ const brainwaveGainRefs = useRef({});
   ]);
 
   useEffect(() => {
-
-  if (!isMobile) return;
-
-  async function initBrainwavesMobile(){
-
-    const ctx = mobileEngineRef.current?.ctx;
-    if (!ctx) return;
-
-    await preloadNatureSounds();
-
-    Object.entries(brainwaves).forEach(([type, cfg]) => {
-
-      if (cfg.enabled) {
-
-        if (!brainwaveOscRefs.current[type]) {
-
-          const oscL = ctx.createOscillator();
-          const oscR = ctx.createOscillator();
-
-          const gain = ctx.createGain();
-
-          const panL = ctx.createStereoPanner();
-          const panR = ctx.createStereoPanner();
-
-          panL.pan.value = -1;
-          panR.pan.value = 1;
-
-          oscL.frequency.value = cfg.carrier;
-          oscR.frequency.value = cfg.carrier + cfg.beat;
-
-          gain.gain.value = (cfg.intensity / 100) * 0.2;
-
-          oscL.connect(panL).connect(gain);
-          oscR.connect(panR).connect(gain);
-
-          gain.connect(ctx.destination);
-
-          oscL.start();
-          oscR.start();
-
-          brainwaveOscRefs.current[type] = { oscL, oscR };
-          brainwaveGainRefs.current[type] = gain;
-
+    if (!isMobile) return;
+    async function initBrainwavesMobile(){
+      const ctx = mobileEngineRef.current?.ctx;
+      if (!ctx) return;
+      await preloadNatureSounds();
+      Object.entries(brainwaves).forEach(([type, cfg]) => {
+        if (cfg.enabled) {
+          if (!brainwaveOscRefs.current[type]) {
+            const oscL = ctx.createOscillator();
+            const oscR = ctx.createOscillator();
+            const gain = ctx.createGain();
+            const panL = ctx.createStereoPanner();
+            const panR = ctx.createStereoPanner();
+            panL.pan.value = -1;
+            panR.pan.value = 1;
+            oscL.frequency.value = cfg.carrier;
+            oscR.frequency.value = cfg.carrier + cfg.beat;
+            gain.gain.value = (cfg.intensity / 100) * 0.2;
+            oscL.connect(panL).connect(gain);
+            oscR.connect(panR).connect(gain);
+            gain.connect(ctx.destination);
+            oscL.start();
+            oscR.start();
+            brainwaveOscRefs.current[type] = { oscL, oscR };
+            brainwaveGainRefs.current[type] = gain;
+          }
+        } else {
+          const osc = brainwaveOscRefs.current[type];
+          if (osc) {
+            osc.oscL.stop();
+            osc.oscR.stop();
+            delete brainwaveOscRefs.current[type];
+            delete brainwaveGainRefs.current[type];
+          }
         }
-
-      } else {
-
-        const osc = brainwaveOscRefs.current[type];
-
-        if (osc) {
-
-          osc.oscL.stop();
-          osc.oscR.stop();
-
-          delete brainwaveOscRefs.current[type];
-          delete brainwaveGainRefs.current[type];
-
-        }
-
-      }
-
-    });
-
-  }
-
-  initBrainwavesMobile();
-
-}, [brainwaves]);
-
-  // CAMBIO 3: sync mobile layers on change — intensity = ON/OFF, volume = loudness
-  useEffect(() => {
-  if (!isMobile || !isPlaying || !mobileEngineRef.current) return;
-
-  const engine = mobileEngineRef.current;
-  
-
-  Object.entries(layers).forEach(([type, cfg]) => {
-
-    const volume = cfg.volume;
-
-    if (volume > 0) {
-
-      if (!engine.layers[type]) {
-        engine.playLayer(type, volume);
-      } else {
-        engine.setVolume(type, volume);
-      }
-
-    } else {
-
-      if (engine.layers[type]) {
-        engine.stopLayer(type);
-      }
-
+      });
     }
+    initBrainwavesMobile();
+  }, [brainwaves]);
 
-  });
-
-}, [layers, isPlaying]);
+  useEffect(() => {
+    if (!isMobile || !isPlaying || !mobileEngineRef.current) return;
+    const engine = mobileEngineRef.current;
+    Object.entries(layers).forEach(([type, cfg]) => {
+      const volume = cfg.volume;
+      if (volume > 0) {
+        if (!engine.layers[type]) {
+          engine.playLayer(type, volume);
+        } else {
+          engine.setVolume(type, volume);
+        }
+      } else {
+        if (engine.layers[type]) {
+          engine.stopLayer(type);
+        }
+      }
+    });
+  }, [layers, isPlaying]);
 
   const natureLoadingRef = useRef({});
 
@@ -674,7 +620,6 @@ const brainwaveGainRefs = useRef({});
     return promise;
   };
 
-  // CAMBIO 4: startNatureSound uses mobile ctx when on mobile
   const startNatureSound = (soundKey, volume) => {
     const ctx = isMobile ? mobileEngineRef.current?.ctx : audioContextRef.current;
     const destination = isMobile ? mobileEngineRef.current?.masterGain : (gainNodeRef.current ?? ctx?.destination);
@@ -694,11 +639,9 @@ const brainwaveGainRefs = useRef({});
     const gain2      = ctx.createGain();
     const masterGain = ctx.createGain();
     masterGain.gain.value = volume / 100;
-
     gain1.connect(masterGain);
     gain2.connect(masterGain);
     masterGain.connect(destination ?? ctx.destination);
-
     gain1.gain.value = 1;
     gain2.gain.value = 0;
 
@@ -773,12 +716,10 @@ const brainwaveGainRefs = useRef({});
         const effectiveDuration = playDuration > MAX_SEGMENT ? MAX_SEGMENT : playDuration;
         const maxOffset = Math.max(0, playDuration - effectiveDuration - XFADE);
         const startOffset = maxOffset > 0 ? Math.random() * maxOffset : 0;
-
         state.buffer       = buffer;
         state.trimStart    = startOffset;
         state.trimEnd      = startOffset + effectiveDuration;
         state.playDuration = effectiveDuration;
-
         const schedulePlay = () => {
           gain1.gain.cancelScheduledValues(ctx.currentTime);
           gain1.gain.setValueAtTime(1, ctx.currentTime);
@@ -803,10 +744,8 @@ const brainwaveGainRefs = useRef({});
     st.cancelled = true;
     st._killedByUser = true;
     if (st.timerId) clearTimeout(st.timerId);
-
     const ctx = isMobile ? mobileEngineRef.current?.ctx : audioContextRef.current;
     const now = ctx?.currentTime ?? 0;
-
     if (immediate) {
       try { st.src1?.stop(0); } catch {}
       try { st.src2?.stop(0); } catch {}
@@ -863,143 +802,87 @@ const brainwaveGainRefs = useRef({});
     });
   };
 
-  // CAMBIO 4: handleNatureToggle uses mobile ctx
-  
   const handleNatureToggle = (soundKey, checked) => {
-
-  if (natureToggleLock.current) return;
-
-  natureToggleLock.current = true;
-
-  setTimeout(() => {
-    natureToggleLock.current = false;
-  }, 300);
-
-  setNatureSounds(prev => ({
-    ...prev,
-    [soundKey]: { ...prev[soundKey], enabled: checked }
-  }));
-
-  if (checked) {
-
-    const ctx = isMobile ? mobileEngineRef.current?.ctx : audioContextRef.current;
-
-    if (ctx && ctx.state !== 'closed' && !natureAudioRefs.current[soundKey]) {
-
-      const currentVolume = natureSoundsRef.current[soundKey]?.volume ?? 70;
-
-      startNatureSound(soundKey, currentVolume);
-
+    if (natureToggleLock.current) return;
+    natureToggleLock.current = true;
+    setTimeout(() => { natureToggleLock.current = false; }, 300);
+    setNatureSounds(prev => ({
+      ...prev,
+      [soundKey]: { ...prev[soundKey], enabled: checked }
+    }));
+    if (checked) {
+      const ctx = isMobile ? mobileEngineRef.current?.ctx : audioContextRef.current;
+      if (ctx && ctx.state !== 'closed' && !natureAudioRefs.current[soundKey]) {
+        const currentVolume = natureSoundsRef.current[soundKey]?.volume ?? 70;
+        startNatureSound(soundKey, currentVolume);
+      }
+    } else {
+      if (natureAudioRefs.current[soundKey]) {
+        stopNatureSoundImperative(soundKey, false);
+      }
     }
-
-  } else {
-
-    if (natureAudioRefs.current[soundKey]) {
-      stopNatureSoundImperative(soundKey, false);
-    }
-
-  }
-
-};
+  };
 
   const lastPlayTimestamp = useRef(0);
   const workletLoadedRef = useRef(false);
 
   const play = async () => {
     const now = Date.now();
-if (now - lastPlayTimestamp.current < 700) return;
-lastPlayTimestamp.current = now;
-
-if (isTransitioning) return;
-
-if (isPlaying) {
-  stopSound();
-  return;
-}
+    if (now - lastPlayTimestamp.current < 700) return;
+    lastPlayTimestamp.current = now;
+    if (isTransitioning) return;
+    if (isPlaying) {
+      stopSound();
+      return;
+    }
 
     setIsTransitioning(true);
     if (!workletLoadedRef.current) setIsGenerating(true);
 
     try {
-      // CAMBIO 5: mobile path
       if (isMobile) {
-
-  // si había un engine anterior medio vivo, destruirlo primero
-  if (mobileEngineRef.current) {
-    try {
-      await mobileEngineRef.current.destroy();
-    } catch {}
-    mobileEngineRef.current = null;
-  }
-
-  const engine = new MobileAudioEngine();
-  await engine.init();
-
-  // asegurar resume real justo antes de reproducir
-  if (engine.ctx && engine.ctx.state === 'suspended') {
-    try {
-      await engine.ctx.resume();
-    } catch {}
-  }
-
-  mobileEngineRef.current = engine;
-
-  Object.entries(layers).forEach(([type, cfg]) => {
-    if (cfg.volume > 0) {
-      engine.playLayer(type, cfg.volume);
-    }
-  });
-
-  setIsPlaying(true);
-  isPlayingRef.current = true;
-
-  if (isLimited) startLimitTimer();
-
-  startAllEnabledNatureSounds();
-
-  setIsGenerating(false);
-  setIsTransitioning(false);
-  return;
-}
-
-      // Desktop path (unchanged)
-      const AudioCtx = window.AudioContext || window.webkitAudioContext;
-      const ctx = new AudioCtx({ latencyHint: 'interactive', sampleRate: 44100, channelCount: 2 });
-
-      if (ctx.state === 'suspended') {
-        await ctx.resume();
+        if (mobileEngineRef.current) {
+          try { await mobileEngineRef.current.destroy(); } catch {}
+          mobileEngineRef.current = null;
+        }
+        const engine = new MobileAudioEngine();
+        await engine.init();
+        if (engine.ctx && engine.ctx.state === 'suspended') {
+          try { await engine.ctx.resume(); } catch {}
+        }
+        mobileEngineRef.current = engine;
+        Object.entries(layers).forEach(([type, cfg]) => {
+          if (cfg.volume > 0) { engine.playLayer(type, cfg.volume); }
+        });
+        setIsPlaying(true);
+        isPlayingRef.current = true;
+        if (isLimited) startLimitTimer();
+        startAllEnabledNatureSounds();
+        setIsGenerating(false);
+        setIsTransitioning(false);
+        return;
       }
 
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      const ctx = new AudioCtx({ latencyHint: 'interactive', sampleRate: 44100, channelCount: 2 });
+      if (ctx.state === 'suspended') { await ctx.resume(); }
       audioContextRef.current = ctx;
-
       const masterGain = ctx.createGain();
       masterGain.gain.value = 1;
       gainNodeRef.current = masterGain;
-
       await ctx.audioWorklet.addModule('/realtime-engine.worklet.js');
       workletLoadedRef.current = true;
-
-      if (ctx.state === 'suspended') {
-        await ctx.resume();
-      }
-
+      if (ctx.state === 'suspended') { await ctx.resume(); }
       const engine = new AudioWorkletNode(ctx, 'realtime-engine', {
         numberOfOutputs: 1,
         outputChannelCount: [2],
         processorOptions: { renderQuantumSize: 128 }
       });
-
       mixerNodeRef.current = engine;
-
       const f = ensureStableChain(ctx);
-
       engine.connect(f.inGain);
       masterGain.connect(ctx.destination);
-
-      if (ctx.state === 'suspended') {
-        await ctx.resume();
-      }
-
+      if (ctx.state === 'suspended') { await ctx.resume(); }
       const forceParams = () => {
         const node = mixerNodeRef.current;
         if (!node || ctx.state !== 'running') return;
@@ -1012,22 +895,16 @@ if (isPlaying) {
         });
         if (gainNodeRef.current) gainNodeRef.current.gain.setValueAtTime(1, t);
       };
-
       engine.port.postMessage({ type: 'warmup', samples: 4800 });
-
       forceParams();
       setTimeout(() => { forceParams(); syncAllRealtimeParams(ctx); }, 80);
       setTimeout(() => { forceParams(); syncAllRealtimeParams(ctx); }, 300);
       setTimeout(() => syncAllRealtimeParams(ctx), 800);
-
       setIsPlaying(true);
       isPlayingRef.current = true;
-
       if (isLimited) startLimitTimer();
-
       preloadAllNatureBuffers(ctx);
       startAllEnabledNatureSounds();
-
     } catch (err) {
       console.error('Play error:', err);
       try {
@@ -1043,39 +920,30 @@ if (isPlaying) {
   };
 
   const stopSound = () => {
-    // CAMBIO 6: mobile path
     if (isMobile) {
-  pauseLimitTimer();
-
-  const engine = mobileEngineRef.current;
-  mobileEngineRef.current = null;
-
-  killAllNatureNow();
-
-  setIsPlaying(false);
-  isPlayingRef.current = false;
-  setIsGenerating(false);
-  setIsTransitioning(true);
-
-  (async () => {
-    if (engine) {
-      try { engine.fadeOut(0.08); } catch {}
-      await new Promise(resolve => setTimeout(resolve, 120));
-      try { engine.stopAll(); } catch {}
-      try { await engine.destroy(); } catch {}
+      pauseLimitTimer();
+      const engine = mobileEngineRef.current;
+      mobileEngineRef.current = null;
+      killAllNatureNow();
+      setIsPlaying(false);
+      isPlayingRef.current = false;
+      setIsGenerating(false);
+      setIsTransitioning(true);
+      (async () => {
+        if (engine) {
+          try { engine.fadeOut(0.08); } catch {}
+          await new Promise(resolve => setTimeout(resolve, 120));
+          try { engine.stopAll(); } catch {}
+          try { await engine.destroy(); } catch {}
+        }
+        setIsTransitioning(false);
+      })();
+      return;
     }
-    setIsTransitioning(false);
-  })();
 
-  return;
-}
-
-    // Desktop path (unchanged)
     pauseLimitTimer();
-
     const ctx = audioContextRef.current;
     const gain = gainNodeRef.current;
-
     if (!ctx || !gain) {
       killAllNatureNow();
       mixerNodeRef.current = null;
@@ -1088,11 +956,9 @@ if (isPlaying) {
       return;
     }
     if (!isPlaying) return;
-
     setIsPlaying(false);
     isPlayingRef.current = false;
     setIsTransitioning(true);
-
     const fadeTime = 0.1;
     const now = ctx.currentTime;
     try {
@@ -1100,9 +966,7 @@ if (isPlaying) {
       gain.gain.setValueAtTime(gain.gain.value || 1, now);
       gain.gain.linearRampToValueAtTime(0, now + fadeTime);
     } catch (e) {}
-
     killAllNatureNow();
-
     setTimeout(async () => {
       try {
         if (mixerNodeRef.current) mixerNodeRef.current.disconnect();
@@ -1111,30 +975,20 @@ if (isPlaying) {
         if (filterNodesRef.current.bass) filterNodesRef.current.bass.disconnect();
         if (gain) gain.disconnect();
       } catch {}
-
       filterNodesRef.current = {};
       mixerNodeRef.current = null;
-
-      if (ctx && ctx.state !== 'closed') {
-        await ctx.close();
-      }
-
+      if (ctx && ctx.state !== 'closed') { await ctx.close(); }
       audioContextRef.current = null;
-
       setIsGenerating(false);
       setIsTransitioning(false);
     }, fadeTime * 1000 + 100);
-
     setTimeout(() => {
       setIsTransitioning(false);
       setIsGenerating(false);
     }, fadeTime * 1000 + 500);
   };
 
-  const [exportConfig, setExportConfig] = useState({
-    format: 'wav24_48',
-    duration: 60
-  });
+  const [exportConfig, setExportConfig] = useState({ format: 'wav24_48', duration: 60 });
 
   const quickDurations = [
     { label: '1 min', seconds: 60 },
@@ -1159,7 +1013,6 @@ if (isPlaying) {
   };
 
   const isWavFormat = (fmt) => fmt === 'wav24_44' || fmt === 'wav24_48';
-
   const getEstimateForDuration = (seconds, fmt) => {
     const est = exportTimeEstimates[seconds];
     if (!est) return null;
@@ -1206,9 +1059,7 @@ if (isPlaying) {
   const initMP3Worker = (sampleRate, kbps) => {
     return new Promise((resolve, reject) => {
       const worker = new Worker('/mp3-worker.js');
-      worker.onmessage = (e) => {
-        if (e.data.type === 'ready') resolve(worker);
-      };
+      worker.onmessage = (e) => { if (e.data.type === 'ready') resolve(worker); };
       worker.onerror = (err) => reject(err);
       worker.postMessage({ type: 'init', data: { sampleRate, kbps } });
     });
@@ -1376,7 +1227,6 @@ if (isPlaying) {
       let leftData = renderedBuffer.getChannelData(0);
       let rightData = renderedBuffer.getChannelData(1);
       renderedBuffer = null;
-
       try { if (offlineCtx.close) { await offlineCtx.close(); } } catch {}
       engineNode.disconnect();
 
@@ -1398,9 +1248,7 @@ if (isPlaying) {
       }
 
       if (isMP3) {
-        pendingEncode = {
-          promise: encodeChunkWithWorker(mp3Worker, leftData, rightData, chunkIndex)
-        };
+        pendingEncode = { promise: encodeChunkWithWorker(mp3Worker, leftData, rightData, chunkIndex) };
         leftData = null; rightData = null;
       } else {
         blobParts.push(floatStereoToPCM24(leftData, rightData));
@@ -1412,9 +1260,7 @@ if (isPlaying) {
       const chunksCompleted = chunkIndex + 1;
       const progress = Math.floor((chunksCompleted / numChunks) * 100);
       const avgTimePerChunk = elapsedSeconds / chunksCompleted;
-      const estimatedSecondsLeft = (numChunks - chunksCompleted) > 0
-        ? Math.floor(avgTimePerChunk * (numChunks - chunksCompleted))
-        : 0;
+      const estimatedSecondsLeft = (numChunks - chunksCompleted) > 0 ? Math.floor(avgTimePerChunk * (numChunks - chunksCompleted)) : 0;
       setExportProgress({ isExporting: true, currentChunk: chunksCompleted, totalChunks: numChunks, percentage: Math.min(99, progress), elapsedTime: elapsedSeconds, estimatedTimeLeft: estimatedSecondsLeft, stage: 'rendering' });
       await new Promise(resolve => setTimeout(resolve, 0));
     }
@@ -1486,253 +1332,170 @@ if (isPlaying) {
   };
 
   const PRESETS = {
-  DeepSleep: {
-    layers: {
-      pink:  { intensity: 62, volume: 55,  texture: 18, bass: 50, brightness: 50 },
-      brown: { intensity: 100, volume: 87, texture: 15, bass: 50, brightness: 50 },
-      grey:  { intensity: 100, volume: 87, texture: 15, bass: 50, brightness: 50 },
+    DeepSleep: {
+      layers: {
+        pink:  { intensity: 62, volume: 55,  texture: 18, bass: 50, brightness: 50 },
+        brown: { intensity: 100, volume: 87, texture: 15, bass: 50, brightness: 50 },
+        grey:  { intensity: 100, volume: 87, texture: 15, bass: 50, brightness: 50 },
+      },
+      brainwaves: {},
+      natureSounds: { storm: { enabled: true, volume: 7 } },
+      processing: { bass: 50, treble: 55, mid: 55, stereoWidth: 120, pressure: 50, stereoDecorr: 35 }
     },
-    brainwaves: {},
-    natureSounds: { storm: { enabled: true, volume: 7 } },
-    processing: { bass: 50, treble: 55, mid: 55, stereoWidth: 120, pressure: 50, stereoDecorr: 35 }
-  },
-
-  CalmMind: {
-    layers: {
-      pink:  { intensity: 48, volume: 44,  texture: 22, bass: 50, brightness: 50 },
-      brown: { intensity: 87, volume: 100, texture: 14, bass: 50, brightness: 50 },
-      grey:  { intensity: 50, volume: 83,  texture: 18, bass: 50, brightness: 50 },
-      green: { intensity: 46, volume: 60,  texture: 26, bass: 50, brightness: 50 },
+    CalmMind: {
+      layers: {
+        pink:  { intensity: 48, volume: 44,  texture: 22, bass: 50, brightness: 50 },
+        brown: { intensity: 87, volume: 100, texture: 14, bass: 50, brightness: 50 },
+        grey:  { intensity: 50, volume: 83,  texture: 18, bass: 50, brightness: 50 },
+        green: { intensity: 46, volume: 60,  texture: 26, bass: 50, brightness: 50 },
+      },
+      brainwaves: { alpha: { enabled: true, carrier: 180, beat: 10, intensity: 14 } },
+      natureSounds: { rain: { enabled: true, volume: 1 } },
+      processing: { bass: 50, treble: 55, mid: 55, stereoWidth: 120, pressure: 50, stereoDecorr: 35 }
     },
-    brainwaves: { alpha: { enabled: true, carrier: 180, beat: 10, intensity: 14 } },
-    natureSounds: { rain: { enabled: true, volume: 1 } },
-    processing: { bass: 50, treble: 55, mid: 55, stereoWidth: 120, pressure: 50, stereoDecorr: 35 }
-  },
-
-  DeepFocus: {
-    layers: {
-      white: { intensity: 46, volume: 42,  texture: 18, bass: 50, brightness: 50 },
-      pink:  { intensity: 50, volume: 100, texture: 16, bass: 50, brightness: 50 },
-      brown: { intensity: 87, volume: 100, texture: 50, bass: 50, brightness: 50 },
-      blue:  { intensity: 50, volume: 100, texture: 24, bass: 50, brightness: 50 },
+    DeepFocus: {
+      layers: {
+        white: { intensity: 46, volume: 42,  texture: 18, bass: 50, brightness: 50 },
+        pink:  { intensity: 50, volume: 100, texture: 16, bass: 50, brightness: 50 },
+        brown: { intensity: 87, volume: 100, texture: 50, bass: 50, brightness: 50 },
+        blue:  { intensity: 50, volume: 100, texture: 24, bass: 50, brightness: 50 },
+      },
+      brainwaves: { beta: { enabled: true, carrier: 220, beat: 13, intensity: 16 } },
+      natureSounds: {},
+      processing: { bass: 50, treble: 55, mid: 55, stereoWidth: 120, pressure: 50, stereoDecorr: 35 }
     },
-    brainwaves: { beta: { enabled: true, carrier: 220, beat: 13, intensity: 16 } },
-    natureSounds: {},
-    processing: { bass: 50, treble: 55, mid: 55, stereoWidth: 120, pressure: 50, stereoDecorr: 35 }
-  },
-
-  ADHDSupport: {
-    layers: {
-      white: { intensity: 38, volume: 100, texture: 20, bass: 50, brightness: 50 },
-      pink:  { intensity: 44, volume: 40,  texture: 24, bass: 50, brightness: 50 },
-      brown: { intensity: 90, volume: 100, texture: 18, bass: 50, brightness: 50 },
-      green: { intensity: 64, volume: 100, texture: 30, bass: 50, brightness: 50 },
+    ADHDSupport: {
+      layers: {
+        white: { intensity: 38, volume: 100, texture: 20, bass: 50, brightness: 50 },
+        pink:  { intensity: 44, volume: 40,  texture: 24, bass: 50, brightness: 50 },
+        brown: { intensity: 90, volume: 100, texture: 18, bass: 50, brightness: 50 },
+        green: { intensity: 64, volume: 100, texture: 30, bass: 50, brightness: 50 },
+      },
+      brainwaves: {},
+      natureSounds: { rain: { enabled: true, volume: 4 } },
+      processing: { bass: 50, treble: 55, mid: 55, stereoWidth: 120, pressure: 50, stereoDecorr: 35 }
     },
-    brainwaves: {},
-    natureSounds: { rain: { enabled: true, volume: 4 } },
-    processing: { bass: 50, treble: 55, mid: 55, stereoWidth: 120, pressure: 50, stereoDecorr: 35 }
-  },
-
-  MeditationFlow: {
-    layers: {
-      pink:  { intensity: 78,  volume: 100, texture: 22, bass: 50, brightness: 50 },
-      brown: { intensity: 100, volume: 100, texture: 16, bass: 50, brightness: 50 },
-      green: { intensity: 87,  volume: 100, texture: 30, bass: 50, brightness: 50 },
+    MeditationFlow: {
+      layers: {
+        pink:  { intensity: 78,  volume: 100, texture: 22, bass: 50, brightness: 50 },
+        brown: { intensity: 100, volume: 100, texture: 16, bass: 50, brightness: 50 },
+        green: { intensity: 87,  volume: 100, texture: 30, bass: 50, brightness: 50 },
+      },
+      brainwaves: { theta: { enabled: true, carrier: 160, beat: 6, intensity: 14 } },
+      natureSounds: {},
+      processing: { bass: 50, treble: 55, mid: 55, stereoWidth: 120, pressure: 50, stereoDecorr: 35 }
     },
-    brainwaves: { theta: { enabled: true, carrier: 160, beat: 6, intensity: 14 } },
-    natureSounds: {},
-    processing: { bass: 50, treble: 55, mid: 55, stereoWidth: 120, pressure: 50, stereoDecorr: 35 }
-  },
-
-  TinnitusMasking: {
-    layers: {
-      white:  { intensity: 100, volume: 100, texture: 100, bass: 50, brightness: 50 },
-      blue:   { intensity: 100, volume: 100, texture: 100, bass: 50, brightness: 50 },
-      violet: { intensity: 100, volume: 100, texture: 100, bass: 50, brightness: 50 },
+    TinnitusMasking: {
+      layers: {
+        white:  { intensity: 100, volume: 100, texture: 100, bass: 50, brightness: 50 },
+        blue:   { intensity: 100, volume: 100, texture: 100, bass: 50, brightness: 50 },
+        violet: { intensity: 100, volume: 100, texture: 100, bass: 50, brightness: 50 },
+      },
+      brainwaves: {},
+      natureSounds: { waterfall: { enabled: true, volume: 50 } },
+      processing: { bass: 50, treble: 55, mid: 55, stereoWidth: 120, pressure: 50, stereoDecorr: 35 }
     },
-    brainwaves: {},
-    natureSounds: { waterfall: { enabled: true, volume: 50 } },
-    processing: { bass: 50, treble: 55, mid: 55, stereoWidth: 120, pressure: 50, stereoDecorr: 35 }
-  },
-
-  DeepSpace: {
-    layers: {
-      pink:  { intensity: 72,  volume: 100, texture: 12,  bass: 50, brightness: 50 },
-      brown: { intensity: 100, volume: 100, texture: 55,  bass: 50, brightness: 50 },
-      blue:  { intensity: 71,  volume: 100, texture: 28,  bass: 50, brightness: 50 },
-      black: { intensity: 100, volume: 100, texture: 100, bass: 50, brightness: 50 },
+    DeepSpace: {
+      layers: {
+        pink:  { intensity: 72,  volume: 100, texture: 12,  bass: 50, brightness: 50 },
+        brown: { intensity: 100, volume: 100, texture: 55,  bass: 50, brightness: 50 },
+        blue:  { intensity: 71,  volume: 100, texture: 28,  bass: 50, brightness: 50 },
+        black: { intensity: 100, volume: 100, texture: 100, bass: 50, brightness: 50 },
+      },
+      brainwaves: { theta: { enabled: true, carrier: 150, beat: 5, intensity: 12 } },
+      natureSounds: {},
+      processing: { bass: 50, treble: 55, mid: 55, stereoWidth: 120, pressure: 50, stereoDecorr: 35 }
     },
-    brainwaves: { theta: { enabled: true, carrier: 150, beat: 5, intensity: 12 } },
-    natureSounds: {},
-    processing: { bass: 50, treble: 55, mid: 55, stereoWidth: 120, pressure: 50, stereoDecorr: 35 }
-  },
-
-  MentalReset: {
-    layers: {
-      white: { intensity: 45,  volume: 100, texture: 18, bass: 50, brightness: 50 },
-      pink:  { intensity: 46,  volume: 100, texture: 22, bass: 50, brightness: 50 },
-      brown: { intensity: 100, volume: 100, texture: 14, bass: 50, brightness: 50 },
-      blue:  { intensity: 100, volume: 100, texture: 69, bass: 50, brightness: 50 },
-      green: { intensity: 75,  volume: 100, texture: 30, bass: 50, brightness: 50 },
+    MentalReset: {
+      layers: {
+        white: { intensity: 45,  volume: 100, texture: 18, bass: 50, brightness: 50 },
+        pink:  { intensity: 46,  volume: 100, texture: 22, bass: 50, brightness: 50 },
+        brown: { intensity: 100, volume: 100, texture: 14, bass: 50, brightness: 50 },
+        blue:  { intensity: 100, volume: 100, texture: 69, bass: 50, brightness: 50 },
+        green: { intensity: 75,  volume: 100, texture: 30, bass: 50, brightness: 50 },
+      },
+      brainwaves: {},
+      natureSounds: { wind: { enabled: true, volume: 40 } },
+      processing: { bass: 50, treble: 55, mid: 55, stereoWidth: 120, pressure: 50, stereoDecorr: 35 }
     },
-    brainwaves: {},
-    natureSounds: { wind: { enabled: true, volume: 40 } },
-    processing: { bass: 50, treble: 55, mid: 55, stereoWidth: 120, pressure: 50, stereoDecorr: 35 }
-  },
-};
+  };
 
-const applyPreset = async (k) => {
+  const applyPreset = async (k) => {
+    if (isApplyingPresetRef.current) return;
+    isApplyingPresetRef.current = true;
+    const p = PRESETS[k];
+    if (!p) { isApplyingPresetRef.current = false; return; }
 
-  if (isApplyingPresetRef.current) return;
-  isApplyingPresetRef.current = true;
-
-  const p = PRESETS[k];
-  if (!p) {
-    isApplyingPresetRef.current = false;
-    return;
-  }
-
-  const resetLayer = () => ({
-    intensity: 0,
-    bass: 50,
-    volume: isMobile ? 0 : 100,
-    texture: 50,
-    brightness: 50
-  });
-
-  if (activePreset === k) {
-
-    setActivePreset(null);
-
-    setLayers(prev => {
-      const reset = {};
-      Object.keys(prev).forEach(k => reset[k] = resetLayer());
-      return reset;
+    const resetLayer = () => ({
+      intensity: 0, bass: 50,
+      volume: isMobile ? 0 : 100,
+      texture: 50, brightness: 50
     });
 
-    setBrainwaves(prev => {
-      const reset = {};
-      Object.keys(prev).forEach(k => reset[k] = { ...prev[k], enabled:false });
-      return reset;
-    });
+    if (activePreset === k) {
+      setActivePreset(null);
+      setLayers(prev => { const reset = {}; Object.keys(prev).forEach(k => reset[k] = resetLayer()); return reset; });
+      setBrainwaves(prev => { const reset = {}; Object.keys(prev).forEach(k => reset[k] = { ...prev[k], enabled:false }); return reset; });
+      killAllNatureNow();
+      setNatureSounds(prev => { const reset = {}; Object.keys(prev).forEach(k => reset[k] = { ...prev[k], enabled:false }); return reset; });
+      if (isPlaying) play();
+      setTimeout(() => { isApplyingPresetRef.current = false; }, 600);
+      return;
+    }
 
-    killAllNatureNow();
+    setActivePreset(k);
+    setLayers(prev => { const reset = {}; Object.keys(prev).forEach(k => reset[k] = resetLayer()); return reset; });
 
-    setNatureSounds(prev=>{
-      const reset = {};
-      Object.keys(prev).forEach(k=>reset[k]={...prev[k],enabled:false});
-      return reset;
-    });
-
-    if (isPlaying) play();
-
-    setTimeout(()=>{ isApplyingPresetRef.current=false },600);
-    return;
-  }
-
-  setActivePreset(k);
-
-  setLayers(prev=>{
-    const reset={};
-    Object.keys(prev).forEach(k=>reset[k]=resetLayer());
-    return reset;
-  });
-
-  setTimeout(()=>{
-
-    setLayers(prev=>{
-      const next={...prev};
-
-      Object.keys(next).forEach(layerKey=>{
-
-        const presetLayer = p.layers?.[layerKey];
-
-        if(!presetLayer){
-          next[layerKey] = resetLayer();
-          return;
-        }
-
-        if(isMobile){
-
-          next[layerKey] = {
-            ...prev[layerKey],
-            volume: presetLayer.intensity || 0
-          };
-
-        }else{
-
-          next[layerKey] = presetLayer;
-
-        }
-
+    setTimeout(() => {
+      setLayers(prev => {
+        const next = { ...prev };
+        Object.keys(next).forEach(layerKey => {
+          const presetLayer = p.layers?.[layerKey];
+          if (!presetLayer) { next[layerKey] = resetLayer(); return; }
+          if (isMobile) {
+            next[layerKey] = { ...prev[layerKey], volume: presetLayer.intensity || 0 };
+          } else {
+            next[layerKey] = presetLayer;
+          }
+        });
+        return next;
       });
 
-      return next;
+      setBrainwaves(prev => {
+        const merged = { ...prev };
+        Object.keys(merged).forEach(k => merged[k] = { ...merged[k], enabled: false });
+        if (p.brainwaves) {
+          Object.keys(p.brainwaves).forEach(k => {
+            if (merged[k]) merged[k] = { ...merged[k], ...p.brainwaves[k] };
+          });
+        }
+        return merged;
+      });
 
-    });
-
-    setBrainwaves(prev=>{
-      const merged={...prev};
-      Object.keys(merged).forEach(k=>merged[k]={...merged[k],enabled:false});
-      if(p.brainwaves){
-        Object.keys(p.brainwaves).forEach(k=>{
-          if(merged[k]) merged[k]={...merged[k],...p.brainwaves[k]};
+      if (p.natureSounds) {
+        if (isMobile) {
+          Object.keys(natureAudioRefs.current).forEach(sk => { stopNatureSoundImperative(sk, true); });
+        }
+        setNatureSounds(prev => {
+          const next = {};
+          Object.keys(prev).forEach(sk => {
+            const presetSound = p.natureSounds?.[sk];
+            if (presetSound) { next[sk] = { ...prev[sk], ...presetSound }; }
+            else { next[sk] = { ...prev[sk], enabled: false }; }
+          });
+          return next;
         });
-      }
-      return merged;
-    });
-
-    if (p.natureSounds) {
-
-  // MOBILE: detener todos los sonidos activos antes de aplicar preset
-  if (isMobile) {
-    Object.keys(natureAudioRefs.current).forEach(sk => {
-      stopNatureSoundImperative(sk, true);
-    });
-  }
-
-  // reset completo y aplicar solo los del preset
-  setNatureSounds(prev => {
-
-    const next = {};
-
-    Object.keys(prev).forEach(sk => {
-
-      const presetSound = p.natureSounds?.[sk];
-
-      if (presetSound) {
-        next[sk] = { ...prev[sk], ...presetSound };
-      } else {
-        next[sk] = { ...prev[sk], enabled: false };
+        if (isPlayingRef.current) {
+          Object.entries(p.natureSounds).forEach(([sk, cfg]) => {
+            if (cfg.enabled) { startNatureSound(sk, cfg.volume ?? 70); }
+          });
+        }
       }
 
-    });
-
-    return next;
-
-  });
-
-  if (isPlayingRef.current) {
-
-    Object.entries(p.natureSounds).forEach(([sk, cfg]) => {
-
-      if (cfg.enabled) {
-        startNatureSound(sk, cfg.volume ?? 70);
-      }
-
-    });
-
-  }
-
-}
-
-    if(!isPlaying) play();
-
-    setTimeout(()=>{ isApplyingPresetRef.current=false },600);
-
-  },150);
-
-};
+      if (!isPlaying) play();
+      setTimeout(() => { isApplyingPresetRef.current = false; }, 600);
+    }, 150);
+  };
 
   const getLayerDesc = (k) => {
     const d = {
@@ -1769,6 +1532,10 @@ const applyPreset = async (k) => {
     return `${hours}h ${remainingMins}m`;
   };
 
+  // ── Responsive helpers ──────────────────────────────────────────
+  const px = isMobile ? '16px' : '32px';   // horizontal padding
+  const headerPy = isMobile ? '14px' : '24px'; // header vertical padding
+
   const ExportDurationButtons = ({ format }) => {
     const estimate = getEstimateForDuration(exportConfig.duration, format);
     return (
@@ -1780,32 +1547,24 @@ const applyPreset = async (k) => {
             </span>
           </div>
         )}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px', marginBottom: '16px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: isMobile ? '6px' : '8px', marginBottom: '16px' }}>
           {quickDurations.map((option) => (
             <button
               key={option.label}
               onClick={() => setExportConfig(pr => ({ ...pr, duration: option.seconds }))}
               style={exportConfig.duration === option.seconds ? {
                 background: 'linear-gradient(to right,#facc15,#fde047)',
-                color: '#000',
-                border: '2px solid #eab308',
+                color: '#000', border: '2px solid #eab308',
                 boxShadow: '0 4px 6px rgba(250,204,21,0.5)',
-                padding: '12px',
-                borderRadius: '8px',
-                fontSize: '12px',
-                fontWeight: 600,
-                cursor: 'pointer',
-                transition: 'all 0.3s',
+                padding: isMobile ? '8px 4px' : '12px',
+                borderRadius: '8px', fontSize: isMobile ? '11px' : '12px',
+                fontWeight: 600, cursor: 'pointer', transition: 'all 0.3s',
               } : {
-                background: '#0f172a',
-                color: '#fef9c3',
+                background: '#0f172a', color: '#fef9c3',
                 border: '2px solid rgba(250,204,21,0.3)',
-                padding: '12px',
-                borderRadius: '8px',
-                fontSize: '12px',
-                fontWeight: 600,
-                cursor: 'pointer',
-                transition: 'all 0.3s',
+                padding: isMobile ? '8px 4px' : '12px',
+                borderRadius: '8px', fontSize: isMobile ? '11px' : '12px',
+                fontWeight: 600, cursor: 'pointer', transition: 'all 0.3s',
               }}
             >
               {option.label}
@@ -1826,563 +1585,445 @@ const applyPreset = async (k) => {
           0%, 100% { transform: translateY(0px); }
           50% { transform: translateY(-2px); }
         }
-        @keyframes spin {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
-        }
-        @keyframes pulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.5; }
-        }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
         input[type=range] {
-          -webkit-appearance: none;
-          appearance: none;
-          width: 100%;
-          height: 8px;
-          border-radius: 8px;
-          background: rgba(51,65,85,0.5);
-          cursor: pointer;
-          outline: none;
-          display: block;
+          -webkit-appearance: none; appearance: none;
+          width: 100%; height: 8px; border-radius: 8px;
+          background: rgba(51,65,85,0.5); cursor: pointer; outline: none; display: block;
         }
         input[type=range]::-webkit-slider-thumb {
-          -webkit-appearance: none;
-          appearance: none;
-          width: 18px;
-          height: 18px;
-          border-radius: 50%;
-          background: #facc15;
-          cursor: pointer;
-          box-shadow: 0 0 4px rgba(250,204,21,0.6);
+          -webkit-appearance: none; appearance: none;
+          width: 18px; height: 18px; border-radius: 50%;
+          background: #facc15; cursor: pointer; box-shadow: 0 0 4px rgba(250,204,21,0.6);
         }
         input[type=range]::-moz-range-thumb {
-          width: 18px;
-          height: 18px;
-          border-radius: 50%;
-          background: #facc15;
-          cursor: pointer;
-          border: none;
-          box-shadow: 0 0 4px rgba(250,204,21,0.6);
+          width: 18px; height: 18px; border-radius: 50%;
+          background: #facc15; cursor: pointer; border: none; box-shadow: 0 0 4px rgba(250,204,21,0.6);
         }
-        input[type=checkbox] {
-          accent-color: #facc15;
-          width: 16px;
-          height: 16px;
-          cursor: pointer;
-        }
+        input[type=checkbox] { accent-color: #facc15; width: 16px; height: 16px; cursor: pointer; }
       `}</style>
-      <div style={{
-        width: '100%',
-        minHeight: '100vh',
-        background: 'linear-gradient(to bottom,rgba(15,23,42,0.97),rgba(2,6,23,0.97))',
-      }}>
 
-          {/* HEADER */}
-          <div style={{
-            padding: '24px 32px',
-            borderBottom: '1px solid rgba(250,204,21,0.2)',
-            background: 'linear-gradient(to right,rgba(15,23,42,0.5),rgba(30,41,59,0.5))',
-            textAlign: 'left'
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', textAlign: 'left' }}>
-              {/* LEFT: NEURIAL title + Waves icon + subtitle */}
-              <div style={{ textAlign: 'left' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px' }}>
-                  <a href="/" style={{ textDecoration: 'none' }}>
-  <h1 style={{
-    fontSize: '30px',
-    fontWeight: 700,
-    margin: 0,
-    background: 'linear-gradient(to right,#fef9c3,#fde047,#facc15)',
-    WebkitBackgroundClip: 'text',
-    WebkitTextFillColor: 'transparent',
-    backgroundClip: 'text',
-    animation: 'neurialWaveMotion 4s ease-in-out infinite',
-    cursor: 'pointer'
-  }}>
-    NEURIAL
-  </h1>
-</a>
-                  <Waves style={{ width: '30px', height: '30px', color: '#fde047', animation: 'pulse 2s ease-in-out infinite', flexShrink: 0 }} />
-                </div>
-                <p style={{ fontSize: '14px', color: 'rgba(254,240,138,0.8)', margin: 0 }}>✨ Professional 3D audio with crystal-clear quality</p>
+      <div style={{ width: '100%', minHeight: '100vh', background: 'linear-gradient(to bottom,rgba(15,23,42,0.97),rgba(2,6,23,0.97))' }}>
+
+        {/* ── HEADER ── */}
+        <div style={{
+          padding: `${headerPy} ${px}`,
+          borderBottom: '1px solid rgba(250,204,21,0.2)',
+          background: 'linear-gradient(to right,rgba(15,23,42,0.5),rgba(30,41,59,0.5))',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+
+            {/* LEFT */}
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: isMobile ? '2px' : '4px' }}>
+                <a href="/" style={{ textDecoration: 'none' }}>
+                  <h1 style={{
+                    fontSize: isMobile ? '24px' : '30px',
+                    fontWeight: 700, margin: 0,
+                    background: 'linear-gradient(to right,#fef9c3,#fde047,#facc15)',
+                    WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
+                    backgroundClip: 'text',
+                    animation: 'neurialWaveMotion 4s ease-in-out infinite', cursor: 'pointer'
+                  }}>NEURIAL</h1>
+                </a>
+                <Waves style={{ width: isMobile ? '22px' : '30px', height: isMobile ? '22px' : '30px', color: '#fde047', animation: 'pulse 2s ease-in-out infinite', flexShrink: 0 }} />
               </div>
-
-              {/* RIGHT: PRO/Upgrade + sign out */}
-              {isPro ? (
-                <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '20px' }}>
-                  <span style={{ fontSize: '12px', color: '#94a3b8', whiteSpace: 'nowrap' }}>{user?.email || 'markelarteche@gmail.com'}</span>
-                  <span style={{ fontSize: '12px', fontWeight: 700, color: '#facc15', whiteSpace: 'nowrap' }}>⚡ PRO</span>
-                  <button onClick={onSignOut} style={{ padding: '6px 12px', borderRadius: '8px', fontSize: '12px', color: '#94a3b8', border: '1px solid #475569', background: 'transparent', cursor: 'pointer', whiteSpace: 'nowrap' }}>Sign out</button>
-                </div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '20px' }}>
-                  {user?.email && <span style={{ fontSize: '12px', color: '#94a3b8', whiteSpace: 'nowrap' }}>{user.email}</span>}
-                  <button
-                    onClick={() => window.location.href = `https://buy.stripe.com/bJebJ1eMgdmxcPf5r8b3q00?success_url=${encodeURIComponent(window.location.origin + '?upgraded=true')}`}
-                    style={{ padding: '8px 16px', borderRadius: '12px', fontWeight: 700, fontSize: '14px', background: 'linear-gradient(to right,#facc15,#fde047)', color: '#000', border: '2px solid rgba(234,179,8,0.5)', boxShadow: '0 4px 6px rgba(250,204,21,0.3)', cursor: 'pointer', transition: 'all 0.3s', whiteSpace: 'nowrap' }}
-                  >
-                    ⚡ Upgrade
-                  </button>
-                  {onSignOut && <button onClick={onSignOut} style={{ padding: '6px 12px', borderRadius: '8px', fontSize: '12px', color: '#94a3b8', border: '1px solid #475569', background: 'transparent', cursor: 'pointer', whiteSpace: 'nowrap' }}>Sign out</button>}
-                </div>
+              {/* subtitle hidden on mobile to save space */}
+              {!isMobile && (
+                <p style={{ fontSize: '14px', color: 'rgba(254,240,138,0.8)', margin: 0 }}>✨ Professional 3D audio with crystal-clear quality</p>
               )}
             </div>
-          </div>
 
-          {/* PRESETS SECTION */}
-          <div style={{ padding: '24px 32px', borderBottom: '1px solid rgba(250,204,21,0.1)' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', isolation: 'isolate' }}>
-              {['DeepSleep', 'DeepSpace', 'CalmMind', 'MentalReset', 'DeepFocus', 'TinnitusMasking', 'ADHDSupport', 'MeditationFlow'].map(p => (
+            {/* RIGHT */}
+            {isPro ? (
+              <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: isMobile ? '10px' : '20px' }}>
+                {!isMobile && <span style={{ fontSize: '12px', color: '#94a3b8', whiteSpace: 'nowrap' }}>{user?.email || 'markelarteche@gmail.com'}</span>}
+                <span style={{ fontSize: '12px', fontWeight: 700, color: '#facc15', whiteSpace: 'nowrap' }}>⚡ PRO</span>
+                <button onClick={onSignOut} style={{ padding: isMobile ? '5px 10px' : '6px 12px', borderRadius: '8px', fontSize: '12px', color: '#94a3b8', border: '1px solid #475569', background: 'transparent', cursor: 'pointer', whiteSpace: 'nowrap' }}>Sign out</button>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: isMobile ? '8px' : '20px' }}>
+                {!isMobile && user?.email && <span style={{ fontSize: '12px', color: '#94a3b8', whiteSpace: 'nowrap' }}>{user.email}</span>}
                 <button
-                  key={p}
-                  onClick={() => { if (isTransitioning) return; applyPreset(p); }}
-                  style={activePreset === p ? {
-                    padding: '12px 16px',
-                    borderRadius: '8px',
-                    fontSize: '14px',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    transition: 'all 0.3s',
-                    background: 'linear-gradient(to right,#facc15,#fde047)',
-                    color: '#000',
-                    border: '2px solid #eab308',
-                    boxShadow: '0 4px 6px rgba(250,204,21,0.5)',
-                    outline: '2px solid rgba(250,204,21,0.5)',
-                    outlineOffset: '2px'
-                  } : {
-                    padding: '12px 16px',
-                    borderRadius: '8px',
-                    fontSize: '14px',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    transition: 'all 0.3s',
-                    background: 'linear-gradient(to right,#1e293b,#0f172a)',
-                    color: '#fff',
-                    border: '2px solid rgba(250,204,21,0.3)'
-                  }}
+                  onClick={() => window.location.href = `https://buy.stripe.com/bJebJ1eMgdmxcPf5r8b3q00?success_url=${encodeURIComponent(window.location.origin + '?upgraded=true')}`}
+                  style={{ padding: isMobile ? '7px 12px' : '8px 16px', borderRadius: '12px', fontWeight: 700, fontSize: isMobile ? '13px' : '14px', background: 'linear-gradient(to right,#facc15,#fde047)', color: '#000', border: '2px solid rgba(234,179,8,0.5)', boxShadow: '0 4px 6px rgba(250,204,21,0.3)', cursor: 'pointer', transition: 'all 0.3s', whiteSpace: 'nowrap' }}
                 >
-                  {p.replace(/([A-Z])/g, ' $1').trim()}
+                  ⚡ Upgrade
                 </button>
-              ))}
-            </div>
+                {!isMobile && onSignOut && <button onClick={onSignOut} style={{ padding: '6px 12px', borderRadius: '8px', fontSize: '12px', color: '#94a3b8', border: '1px solid #475569', background: 'transparent', cursor: 'pointer', whiteSpace: 'nowrap' }}>Sign out</button>}
+              </div>
+            )}
           </div>
+        </div>
 
-          {/* TABS */}
-          <div style={{ marginTop: '16px', padding: '0 32px' }}>
-            <div style={{ display: 'flex', gap: '8px', paddingBottom: '12px', borderBottom: '1px solid rgba(250,204,21,0.1)' }}>
-              {['layers', 'nature', 'brainwaves', 'export'].map(t => (
-                <button
-                  key={t}
-                  onClick={() => setActiveTab(t)}
-                  style={activeTab === t ? {
-                    flex: 1,
-                    padding: '12px',
-                    borderRadius: '12px',
-                    fontWeight: 600,
-                    fontSize: '14px',
-                    cursor: 'pointer',
-                    transition: 'all 0.3s',
-                    background: 'linear-gradient(to right,#facc15,#fde047)',
-                    color: '#000',
-                    border: '2px solid #eab308',
-                    boxShadow: '0 4px 6px rgba(250,204,21,0.5)'
-                  } : {
-                    flex: 1,
-                    padding: '12px',
-                    borderRadius: '12px',
-                    fontWeight: 600,
-                    fontSize: '14px',
-                    cursor: 'pointer',
-                    transition: 'all 0.3s',
-                    background: 'linear-gradient(to right,#1e293b,#0f172a)',
-                    color: '#fff',
-                    border: '2px solid rgba(250,204,21,0.2)'
-                  }}
-                >
-                  {t.charAt(0).toUpperCase() + t.slice(1)}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* MAIN CONTENT */}
-          <div style={{ padding: '24px 32px' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-
-              {/* ===== LAYERS TAB ===== */}
-              {activeTab === 'layers' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                  <div style={{ borderRadius: '8px', padding: '16px', marginBottom: '16px', background: 'linear-gradient(90deg,rgba(250,204,21,0.1),rgba(253,224,71,0.1))', border: '2px solid rgba(250,204,21,0.3)' }}>
-                    <p style={{ color: '#fef08a', fontSize: '12px', margin: 0 }}>🎨 <strong>Sound Colors:</strong> Each noise type has a unique frequency profile. Mix and match to create your perfect soundscape with crystal-clear 3D audio. &nbsp;·&nbsp; 🎧 Best experienced with headphones on</p>
-                  </div>
-                  {Object.entries(layers).map(([t, c]) => (
-                    <div key={t} style={{ padding: '16px', borderRadius: '8px', transition: 'all 0.3s', background: 'rgba(30,41,59,0.5)', border: '2px solid rgba(250,204,21,0.2)', overflow: 'visible', textAlign: 'left' }}>
-                      <h4 style={{ color: '#fef08a', fontWeight: 500, fontSize: '14px', marginBottom: '8px', textTransform: 'capitalize', margin: '0 0 8px 0' }}>{t} Noise</h4>
-                      <p style={{ fontSize: '12px', marginBottom: '12px', color: 'rgba(254,240,138,0.6)', margin: '0 0 12px 0' }}>{getLayerDesc(t)}</p>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                        {/* Desktop: intensity slider — hidden on mobile */}
-                        {!isMobile && (
-                          <div style={{ paddingBottom: '4px' }}>
-                            <label style={{ display: 'block', fontSize: '12px', marginBottom: '8px', color: 'rgba(254,240,138,0.7)' }}>Intensity: <span {...NT}>{c.intensity}%</span></label>
-                            <input type="range" min="0" max="100" value={c.intensity} onChange={(e) => { const v = parseInt(e.target.value); setLayers(pr => ({ ...pr, [t]: { ...pr[t], intensity: v } })); sendParam(`${t}_intensity`, v / 100); }} />
-                          </div>
-                        )}
-                        {/* Desktop: volume + texture shown when intensity > 0 / Mobile: volume always shown */}
-                        {(isMobile || c.intensity > 0) && (
-                          <>
-                            <div style={{ paddingBottom: '4px' }}>
-                              <label style={{ display: 'block', fontSize: '12px', marginBottom: '8px', color: 'rgba(254,240,138,0.7)' }}>Volume: <span {...NT}>{c.volume}%</span></label>
-                              <input type="range" min="0" max="100" value={c.volume} onChange={(e) => { const v = parseInt(e.target.value); setLayers(pr => ({ ...pr, [t]: { ...pr[t], volume: v } })); sendParam(`${t}_volume`, v / 100); }} />
-                            </div>
-                            {!isMobile && (
-                              <div style={{ paddingBottom: '4px' }}>
-                                <label style={{ display: 'block', fontSize: '12px', marginBottom: '8px', color: 'rgba(254,240,138,0.7)' }}>Texture: <span {...NT}>{c.texture}%</span></label>
-                                <input type="range" min="0" max="100" value={c.texture} onChange={(e) => { const v = parseInt(e.target.value); setLayers(pr => ({ ...pr, [t]: { ...pr[t], texture: v } })); sendParam(`${t}_texture`, v / 100); }} />
-                              </div>
-                            )}
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* ===== NATURE TAB ===== */}
-              {activeTab === 'nature' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                  <div style={{ borderRadius: '8px', padding: '16px', marginBottom: '16px', background: 'linear-gradient(90deg,rgba(250,204,21,0.1),rgba(253,224,71,0.1))', border: '2px solid rgba(250,204,21,0.3)' }}>
-                    <p style={{ color: '#fef08a', fontSize: '12px', margin: 0 }}>🌿 <strong>Nature Sounds:</strong> Add realistic nature ambience to your mix. These are your own high-quality recordings that loop seamlessly. &nbsp;·&nbsp; 🎧 Headphones bring every detail to life</p>
-                  </div>
-                  {['rain', 'storm', 'ocean', 'wind', 'fire', 'waterfall', 'river', 'nightforest', 'nightingale'].map((soundKey) => {
-                    const soundConfig = natureSounds[soundKey];
-                    const soundNames = {
-                      rain: { name: '🌧️ Rain', desc: 'Gentle rain sounds' },
-                      storm: { name: '⛈️ Thunderstorm', desc: 'Intense thunderstorm' },
-                      ocean: { name: '🌊 Ocean Waves', desc: 'Calm ocean waves with birds' },
-                      wind: { name: '💨 Wind', desc: 'Soft wind breeze' },
-                      fire: { name: '🔥 Campfire', desc: 'Crackling fire sounds' },
-                      waterfall: { name: '💧 Waterfall', desc: 'Flowing waterfall' },
-                      river: { name: '🏞️ River in Forest', desc: 'River flowing through forest' },
-                      nightforest: { name: '🌙 Night Forest', desc: 'Forest at night with insects' },
-                      nightingale: { name: '🐦 Nightingale', desc: 'Pure nightingale song in forest' }
-                    };
-                    const info = soundNames[soundKey];
-                    return (
-                      <div
-  key={soundKey}
-  style={{
-    padding: '16px',
-    borderRadius: '8px',
-    transition: 'all 0.3s',
-    background: 'rgba(30,41,59,0.5)',
-    border: soundConfig.enabled
-  ? '2px solid rgba(250,204,21,0.8)'
-  : '2px solid rgba(250,204,21,0.2)',
-    overflow: 'visible',
-    textAlign: 'left',
-    cursor: 'pointer'
-  }}
-  onClick={() => handleNatureToggle(soundKey, !soundConfig.enabled)}
->
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                          <div>
-                            <h4 style={{ color: '#fef08a', fontWeight: 500, fontSize: '14px', margin: '0 0 2px 0' }}>{info.name}</h4>
-                            <p style={{ fontSize: '12px', color: 'rgba(254,240,138,0.6)', margin: 0 }}>{info.desc}</p>
-                          </div>
-                          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                            <input
-  type="checkbox"
-  checked={soundConfig.enabled}
-  onClick={(e) => e.stopPropagation()}
-  onChange={(e) => handleNatureToggle(soundKey, e.target.checked)}
-/>
-                            <span style={{ fontSize: '12px', color: 'rgba(254,240,138,0.7)' }}>Enable</span>
-                          </label>
-                        </div>
-                        {soundConfig.enabled && (
-                          <div style={{ marginTop: '12px', paddingBottom: '4px' }}>
-                            <label style={{ display: 'block', fontSize: '12px', marginBottom: '4px', color: 'rgba(254,240,138,0.7)' }}>Volume: <span {...NT}>{soundConfig.volume}%</span></label>
-                            <input type="range" min="0" max="100" value={soundConfig.volume} onChange={(e) => setNatureSounds(prev => ({ ...prev, [soundKey]: { ...prev[soundKey], volume: parseInt(e.target.value) } }))} />
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
-              {/* ===== BRAINWAVES TAB ===== */}
-              {activeTab === 'brainwaves' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                  <div style={{ borderRadius: '8px', padding: '16px', marginBottom: '16px', background: 'linear-gradient(90deg,rgba(250,204,21,0.1),rgba(253,224,71,0.1))', border: '2px solid rgba(250,204,21,0.3)' }}>
-                    <p style={{ color: '#fef08a', fontSize: '12px', margin: 0 }}>🧠 <strong>Brainwave Entrainment:</strong> Binaural beats that guide your brain into specific states. Each frequency targets different mental states for optimal results. &nbsp;·&nbsp; 🎧 Headphones enhance the binaural effect</p>
-                  </div>
-                  {Object.entries(brainwaves).map(([t, c]) => (
-                    <div
-  key={t}
-  style={{
-    padding: '16px',
-    borderRadius: '8px',
-    transition: 'all 0.3s',
-    background: 'rgba(30,41,59,0.5)',
-    border: '2px solid rgba(250,204,21,0.2)',
-    overflow: 'visible',
-    textAlign: 'left',
-    cursor: 'pointer'
-  }}
-  onClick={() =>
-    setBrainwaves(pr => ({
-      ...pr,
-      [t]: { ...pr[t], enabled: !pr[t].enabled }
-    }))
-  }
->
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                        <label
-  style={{
-    color: '#fef08a',
-    fontWeight: 500,
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    fontSize: '14px',
-    cursor: 'pointer',
-    textTransform: 'capitalize'
-  }}
->
-  <input
-    type="checkbox"
-    checked={c.enabled}
-    onClick={(e) => e.stopPropagation()}
-    onChange={(e) =>
-      setBrainwaves(pr => ({
-        ...pr,
-        [t]: { ...pr[t], enabled: e.target.checked }
-      }))
-    }
-  />
-  {t} Wave
-</label>
-</div>
-                      <p style={{ fontSize: '12px', marginBottom: '12px', color: 'rgba(254,240,138,0.6)', margin: '0 0 12px 0' }}>{getBrainDesc(t)}</p>
-                      {c.enabled && (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                          <div style={{ paddingBottom: '4px' }}>
-                            <label style={{ display: 'block', fontSize: '12px', marginBottom: '8px', color: 'rgba(254,240,138,0.7)' }}>Carrier Frequency: <span {...NT}>{c.carrier} Hz</span></label>
-                            <input type="range" min="100" max="400" value={c.carrier} onChange={(e) => { const v = parseInt(e.target.value); setBrainwaves(pr => ({ ...pr, [t]: { ...pr[t], carrier: v } })); sendParam(`${t}_carrier`, v); }} />
-                          </div>
-                          <div style={{ paddingBottom: '4px' }}>
-                            <label style={{ display: 'block', fontSize: '12px', marginBottom: '8px', color: 'rgba(254,240,138,0.7)' }}>Beat Frequency: <span {...NT}>{c.beat} Hz</span></label>
-                            <input type="range" min="1" max="40" value={c.beat} onChange={(e) => { const v = parseInt(e.target.value); setBrainwaves(pr => ({ ...pr, [t]: { ...pr[t], beat: v } })); sendParam(`${t}_beat`, v); }} />
-                          </div>
-                          <div style={{ paddingBottom: '4px' }}>
-                            <label style={{ display: 'block', fontSize: '12px', marginBottom: '8px', color: 'rgba(254,240,138,0.7)' }}>Wave Intensity: <span {...NT}>{c.intensity}%</span></label>
-                            <input type="range" min="0" max="100" value={c.intensity} onChange={(e) => { const v = parseInt(e.target.value); setBrainwaves(pr => ({ ...pr, [t]: { ...pr[t], intensity: v } })); sendParam(`${t}_intensity`, v / 100); }} />
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* ===== EXPORT TAB ===== */}
-              {activeTab === 'export' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                  {isLimited ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40px 16px', textAlign: 'center', gap: '20px' }}>
-                      <div style={{ fontSize: '48px' }}>🔒</div>
-                      <div>
-                        <p style={{ color: '#fef08a', fontWeight: 700, fontSize: '18px', marginBottom: '4px', margin: '0 0 4px 0' }}>Export is a Pro feature</p>
-                        <p style={{ fontSize: '14px', color: '#94a3b8', margin: 0 }}>Upgrade to export unlimited audio in WAV 24-bit or MP3 at any duration.</p>
-                      </div>
-                      <div style={{ width: '100%', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', textAlign: 'left' }}>
-                        <div style={{ borderRadius: '12px', padding: '16px', background: 'rgba(30,41,59,0.7)', border: '2px solid rgba(71,85,105,0.5)' }}>
-                          <p style={{ fontWeight: 700, fontSize: '12px', marginBottom: '10px', color: '#cbd5e1', margin: '0 0 10px 0' }}>FREE</p>
-                          <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '7px' }}>
-                            <li style={{ display: 'flex', gap: '8px', fontSize: '11px', color: '#94a3b8' }}><span style={{ color: '#64748b', flexShrink: 0 }}>•</span>10 minute sessions</li>
-                            <li style={{ display: 'flex', gap: '8px', fontSize: '11px', color: '#94a3b8' }}><span style={{ color: '#64748b', flexShrink: 0 }}>•</span>Basic sound layers</li>
-                            <li style={{ display: 'flex', gap: '8px', fontSize: '11px', color: '#64748b' }}><span style={{ color: '#f87171', flexShrink: 0 }}>✕</span>No audio export</li>
-                            <li style={{ display: 'flex', gap: '8px', fontSize: '11px', color: '#64748b' }}><span style={{ color: '#f87171', flexShrink: 0 }}>✕</span>Limited generator access</li>
-                            <li style={{ display: 'flex', gap: '8px', fontSize: '11px', color: '#64748b' }}><span style={{ color: '#f87171', flexShrink: 0 }}>✕</span>No commercial usage</li>
-                          </ul>
-                        </div>
-                        <div style={{ borderRadius: '12px', padding: '16px', position: 'relative', background: 'rgba(250,204,21,0.1)', border: '2px solid rgba(250,204,21,0.6)' }}>
-                          <div style={{ position: 'absolute', borderRadius: '9999px', top: '-10px', left: '50%', transform: 'translateX(-50%)', background: '#facc15', color: '#000', fontSize: '0.65rem', fontWeight: 700, padding: '2px 8px', whiteSpace: 'nowrap' }}>RECOMMENDED</div>
-                          <p style={{ fontWeight: 700, fontSize: '12px', color: '#fde047', margin: '0 0 2px 0' }}>PRO</p>
-                          <p style={{ fontSize: '11px', fontWeight: 600, color: 'rgba(250,204,21,0.8)', margin: '0 0 10px 0' }}>9.99€/month</p>
-                          <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '7px' }}>
-                            <li style={{ display: 'flex', gap: '8px', fontSize: '11px', color: '#e2e8f0' }}><span style={{ color: '#facc15', flexShrink: 0 }}>✓</span>Unlimited sessions</li>
-                            <li style={{ display: 'flex', gap: '8px', fontSize: '11px', color: '#e2e8f0' }}><span style={{ color: '#facc15', flexShrink: 0 }}>✓</span>Unlimited audio export</li>
-                            <li style={{ display: 'flex', gap: '8px', fontSize: '11px', color: '#e2e8f0' }}><span style={{ color: '#facc15', flexShrink: 0 }}>✓</span>Export WAV 24-bit or MP3</li>
-                            <li style={{ display: 'flex', gap: '8px', fontSize: '11px', color: '#e2e8f0' }}><span style={{ color: '#facc15', flexShrink: 0 }}>✓</span>Commercial usage allowed</li>
-                            <li style={{ display: 'flex', gap: '8px', fontSize: '11px', color: '#e2e8f0' }}><span style={{ color: '#facc15', flexShrink: 0 }}>✓</span>Royalty-free audio</li>
-                            <li style={{ display: 'flex', gap: '8px', fontSize: '11px', color: '#e2e8f0' }}><span style={{ color: '#facc15', flexShrink: 0 }}>✓</span>High-quality rendering</li>
-                            <li style={{ display: 'flex', gap: '8px', fontSize: '11px', color: '#e2e8f0' }}><span style={{ color: '#facc15', flexShrink: 0 }}>✓</span>Priority feature updates</li>
-                          </ul>
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => window.location.href = `https://buy.stripe.com/bJebJ1eMgdmxcPf5r8b3q00?success_url=${encodeURIComponent(window.location.origin + '?upgraded=true')}`}
-                        style={{ width: '100%', padding: '16px', borderRadius: '12px', fontWeight: 700, fontSize: '18px', background: 'linear-gradient(to right,#facc15,#fde047)', color: '#000', border: '2px solid rgba(234,179,8,0.5)', boxShadow: '0 4px 6px rgba(250,204,21,0.3)', cursor: 'pointer', transition: 'all 0.3s' }}
-                      >
-                        ⚡ Upgrade to Pro — 9.99€/month
-                      </button>
-                    </div>
-                  ) : (
-                    <>
-                      <div style={{ padding: '20px', borderRadius: '8px', background: 'rgba(30,41,59,0.5)', border: '2px solid rgba(250,204,21,0.2)' }}>
-                        <label style={{ display: 'block', color: '#fef08a', fontWeight: 500, fontSize: '14px', marginBottom: '12px', textAlign: 'left' }}>Quality</label>
-                        <select
-                          value={exportConfig.format}
-                          onChange={(e) => setExportConfig(pr => ({ ...pr, format: e.target.value }))}
-                          style={{ width: '100%', padding: '12px 16px', borderRadius: '8px', fontSize: '14px', background: '#0f172a', color: '#fef9c3', border: '2px solid rgba(250,204,21,0.3)', outline: 'none', boxSizing: 'border-box' }}
-                        >
-                          <option value="wav24_44">WAV 24-bit / 44.1kHz</option>
-                          <option value="wav24_48">WAV 24-bit / 48kHz</option>
-                          <option value="mp3_320">MP3 / 320 kbps</option>
-                          <option value="mp3_256">MP3 / 256 kbps</option>
-                          <option value="mp3_192">MP3 / 192 kbps</option>
-                          <option value="mp3_160">MP3 / 160 kbps</option>
-                          <option value="mp3_128">MP3 / 128 kbps</option>
-                        </select>
-                      </div>
-                      <div style={{ padding: '20px', borderRadius: '8px', background: 'rgba(30,41,59,0.5)', border: '2px solid rgba(250,204,21,0.2)' }}>
-                        <label style={{ display: 'block', color: '#fef08a', fontWeight: 500, fontSize: '14px', marginBottom: '12px', textAlign: 'left' }}>Duration</label>
-                        <ExportDurationButtons format={exportConfig.format} />
-                        <div>
-                          <label style={{ display: 'block', fontSize: '12px', marginBottom: '8px', color: 'rgba(254,240,138,0.7)', textAlign: 'left' }}>Custom (seconds): <span {...NT}>{exportConfig.duration}</span></label>
-                          <input
-                            type="number"
-                            value={exportConfig.duration}
-                            onChange={(e) => setExportConfig(pr => ({ ...pr, duration: parseInt(e.target.value) || 60 }))}
-                            style={{ width: '100%', padding: '12px 16px', borderRadius: '8px', fontSize: '14px', background: '#0f172a', color: '#fef9c3', border: '2px solid rgba(250,204,21,0.3)', outline: 'none', boxSizing: 'border-box' }}
-                            min="10" max="28800"
-                          />
-                          <p style={{ fontSize: '12px', marginTop: '8px', color: 'rgba(254,240,138,0.6)', margin: '8px 0 0 0', textAlign: 'left' }}>Range: <span {...NT}>10</span> seconds to <span {...NT}>8</span> hours</p>
-                        </div>
-                      </div>
-                      {typeof Notification !== 'undefined' && Notification.permission !== 'granted' && (
-                        <button onClick={requestNotificationPermission} style={{ width: '100%', padding: '12px 20px', borderRadius: '8px', fontWeight: 600, fontSize: '14px', background: 'linear-gradient(to right,#1e293b,#0f172a)', color: '#fff', border: '2px solid rgba(250,204,21,0.3)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', transition: 'all 0.3s', boxSizing: 'border-box' }}>
-                          🔔 Enable notifications (recommended for long exports)
-                        </button>
-                      )}
-                      {notificationsEnabled && (
-                        <div style={{ borderRadius: '8px', padding: '16px', background: 'rgba(34,197,94,0.1)', border: '2px solid rgba(74,222,128,0.3)' }}>
-                          <p style={{ fontSize: '12px', textAlign: 'center', color: '#bbf7d0', margin: 0 }}>✅ Notifications enabled - You'll be notified when export completes</p>
-                        </div>
-                      )}
-                      <button
-                        onClick={expSound}
-                        disabled={isGenerating}
-                        style={{ width: '100%', padding: '16px 24px', borderRadius: '12px', fontWeight: 700, fontSize: '18px', background: 'linear-gradient(to right,#facc15,#fde047)', color: '#000', border: '2px solid rgba(234,179,8,0.5)', boxShadow: '0 4px 6px rgba(250,204,21,0.3)', cursor: isGenerating ? 'not-allowed' : 'pointer', opacity: isGenerating ? 0.5 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', transition: 'all 0.3s', boxSizing: 'border-box' }}
-                      >
-                        {isGenerating
-                          ? (<><div style={{ width: '20px', height: '20px', border: '2px solid rgba(0,0,0,0.3)', borderTopColor: '#000', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />Exporting...</>)
-                          : (<><Download style={{ width: '24px', height: '24px' }} />Export</>)
-                        }
-                      </button>
-                    </>
-                  )}
-                </div>
-              )}
-
-            </div>
-          </div>
-
-          {/* EXPORT PROGRESS BAR */}
-          {(exportProgress.stage !== '' || exportProgress.percentage === 100) && (
-            <ExportProgressBar exportProgress={exportProgress} formatTime={formatTime} NT={NT} />
-          )}
-
-          {/* FADE OUT WARNING BANNER */}
-          {isFadingOut && isLimited && (
-            <div style={{
-              margin: '0 32px 0 32px',
-              padding: '12px 20px',
-              borderRadius: '12px',
-              background: 'linear-gradient(90deg, rgba(250,204,21,0.15), rgba(234,179,8,0.1))',
-              border: '1px solid rgba(250,204,21,0.5)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: '12px',
-              animation: 'pulse 2s ease-in-out infinite',
-            }}>
-              <p style={{ fontSize: '13px', color: '#fef08a', margin: 0 }}>
-                ⏳ <strong>Sesión terminando...</strong> El audio se está desvaneciendo. Actualiza a Pro para continuar.
-              </p>
+        {/* ── PRESETS ── */}
+        <div style={{ padding: `${isMobile ? '16px' : '24px'} ${px}`, borderBottom: '1px solid rgba(250,204,21,0.1)' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: isMobile ? '6px' : '8px', isolation: 'isolate' }}>
+            {['DeepSleep', 'DeepSpace', 'CalmMind', 'MentalReset', 'DeepFocus', 'TinnitusMasking', 'ADHDSupport', 'MeditationFlow'].map(p => (
               <button
-                onClick={() => { window.location.href = `https://buy.stripe.com/bJebJ1eMgdmxcPf5r8b3q00?success_url=${encodeURIComponent(window.location.origin + '?upgraded=true')}`; }}
-                style={{ padding: '6px 14px', borderRadius: '8px', background: '#facc15', color: '#000', border: 'none', fontWeight: 700, fontSize: '12px', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                key={p}
+                onClick={() => { if (isTransitioning) return; applyPreset(p); }}
+                style={activePreset === p ? {
+                  padding: isMobile ? '10px 8px' : '12px 16px',
+                  borderRadius: '8px', fontSize: isMobile ? '12px' : '14px',
+                  fontWeight: 600, cursor: 'pointer', transition: 'all 0.3s',
+                  background: 'linear-gradient(to right,#facc15,#fde047)',
+                  color: '#000', border: '2px solid #eab308',
+                  boxShadow: '0 4px 6px rgba(250,204,21,0.5)',
+                  outline: '2px solid rgba(250,204,21,0.5)', outlineOffset: '2px'
+                } : {
+                  padding: isMobile ? '10px 8px' : '12px 16px',
+                  borderRadius: '8px', fontSize: isMobile ? '12px' : '14px',
+                  fontWeight: 600, cursor: 'pointer', transition: 'all 0.3s',
+                  background: 'linear-gradient(to right,#1e293b,#0f172a)',
+                  color: '#fff', border: '2px solid rgba(250,204,21,0.3)'
+                }}
               >
-                ⚡ Upgrade
+                {formatPresetName(p)}
               </button>
-            </div>
-          )}
-
-          {/* PLAY/STOP BUTTON */}
-          <div style={{ padding: '24px 32px', borderTop: '1px solid rgba(250,204,21,0.2)', background: 'linear-gradient(to top,rgba(2,6,23,0.5),rgba(15,23,42,0.5))' }}>
-            <button
-              onClick={play}
-              disabled={isGenerating || isTransitioning}
-              style={isPlaying ? {
-                width: '100%',
-                padding: '16px',
-                borderRadius: '12px',
-                fontWeight: 700,
-                fontSize: '18px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '12px',
-                cursor: isGenerating || isTransitioning ? 'not-allowed' : 'pointer',
-                opacity: isGenerating || isTransitioning ? 0.5 : 1,
-                transition: 'all 0.3s',
-                background: 'linear-gradient(to right,#dc2626,#ef4444)',
-                color: '#fff',
-                border: '2px solid rgba(239,68,68,0.5)',
-                boxShadow: '0 4px 6px rgba(239,68,68,0.3)',
-                boxSizing: 'border-box',
-              } : {
-                width: '100%',
-                padding: '16px',
-                borderRadius: '12px',
-                fontWeight: 700,
-                fontSize: '18px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '12px',
-                cursor: isGenerating || isTransitioning ? 'not-allowed' : 'pointer',
-                opacity: isGenerating || isTransitioning ? 0.5 : 1,
-                transition: 'all 0.3s',
-                background: 'linear-gradient(to right,#facc15,#fde047)',
-                color: '#000',
-                border: '2px solid rgba(234,179,8,0.5)',
-                boxShadow: '0 4px 6px rgba(250,204,21,0.5)',
-                boxSizing: 'border-box',
-              }}
-            >
-              {isGenerating
-                ? (<><div style={{ width: '20px', height: '20px', border: '2px solid rgba(0,0,0,0.3)', borderTopColor: '#000', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />Preparing...</>)
-                : isPlaying
-                  ? (<><Square style={{ width: '24px', height: '24px' }} />Stop</>)
-                  : (<><Play style={{ width: '24px', height: '24px' }} />Play</>)
-              }
-            </button>
-            <div style={{ marginTop: '12px', fontSize: '12px', textAlign: 'center', color: 'rgba(254,240,138,0.6)' }}>✨ All changes update in real-time while playing</div>
+            ))}
           </div>
+        </div>
+
+        {/* ── TABS ── */}
+        <div style={{ marginTop: isMobile ? '12px' : '16px', padding: `0 ${px}` }}>
+          <div style={{ display: 'flex', gap: isMobile ? '6px' : '8px', paddingBottom: '12px', borderBottom: '1px solid rgba(250,204,21,0.1)' }}>
+            {['layers', 'nature', 'brainwaves', 'export'].map(t => (
+              <button
+                key={t}
+                onClick={() => setActiveTab(t)}
+                style={activeTab === t ? {
+                  flex: 1, padding: isMobile ? '9px 4px' : '12px',
+                  borderRadius: '12px', fontWeight: 600,
+                  fontSize: isMobile ? '12px' : '14px',
+                  cursor: 'pointer', transition: 'all 0.3s',
+                  background: 'linear-gradient(to right,#facc15,#fde047)',
+                  color: '#000', border: '2px solid #eab308',
+                  boxShadow: '0 4px 6px rgba(250,204,21,0.5)'
+                } : {
+                  flex: 1, padding: isMobile ? '9px 4px' : '12px',
+                  borderRadius: '12px', fontWeight: 600,
+                  fontSize: isMobile ? '12px' : '14px',
+                  cursor: 'pointer', transition: 'all 0.3s',
+                  background: 'linear-gradient(to right,#1e293b,#0f172a)',
+                  color: '#fff', border: '2px solid rgba(250,204,21,0.2)'
+                }}
+              >
+                {t.charAt(0).toUpperCase() + t.slice(1)}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* ── MAIN CONTENT ── */}
+        <div style={{ padding: `${isMobile ? '16px' : '24px'} ${px}` }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+
+            {/* ===== LAYERS TAB ===== */}
+            {activeTab === 'layers' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <div style={{ borderRadius: '8px', padding: '16px', marginBottom: '16px', background: 'linear-gradient(90deg,rgba(250,204,21,0.1),rgba(253,224,71,0.1))', border: '2px solid rgba(250,204,21,0.3)' }}>
+                  <p style={{ color: '#fef08a', fontSize: '12px', margin: 0 }}>🎨 <strong>Sound Colors:</strong> Each noise type has a unique frequency profile. Mix and match to create your perfect soundscape with crystal-clear 3D audio. &nbsp;·&nbsp; 🎧 Best experienced with headphones on</p>
+                </div>
+                {Object.entries(layers).map(([t, c]) => (
+                  <div key={t} style={{ padding: '16px', borderRadius: '8px', transition: 'all 0.3s', background: 'rgba(30,41,59,0.5)', border: '2px solid rgba(250,204,21,0.2)', overflow: 'visible', textAlign: 'left' }}>
+                    <h4 style={{ color: '#fef08a', fontWeight: 500, fontSize: '14px', textTransform: 'capitalize', margin: '0 0 8px 0' }}>{t} Noise</h4>
+                    <p style={{ fontSize: '12px', color: 'rgba(254,240,138,0.6)', margin: '0 0 12px 0' }}>{getLayerDesc(t)}</p>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                      {!isMobile && (
+                        <div style={{ paddingBottom: '4px' }}>
+                          <label style={{ display: 'block', fontSize: '12px', marginBottom: '8px', color: 'rgba(254,240,138,0.7)' }}>Intensity: <span {...NT}>{c.intensity}%</span></label>
+                          <input type="range" min="0" max="100" value={c.intensity} onChange={(e) => { const v = parseInt(e.target.value); setLayers(pr => ({ ...pr, [t]: { ...pr[t], intensity: v } })); sendParam(`${t}_intensity`, v / 100); }} />
+                        </div>
+                      )}
+                      {(isMobile || c.intensity > 0) && (
+                        <>
+                          <div style={{ paddingBottom: '4px' }}>
+                            <label style={{ display: 'block', fontSize: '12px', marginBottom: '8px', color: 'rgba(254,240,138,0.7)' }}>Volume: <span {...NT}>{c.volume}%</span></label>
+                            <input type="range" min="0" max="100" value={c.volume} onChange={(e) => { const v = parseInt(e.target.value); setLayers(pr => ({ ...pr, [t]: { ...pr[t], volume: v } })); sendParam(`${t}_volume`, v / 100); }} />
+                          </div>
+                          {!isMobile && (
+                            <div style={{ paddingBottom: '4px' }}>
+                              <label style={{ display: 'block', fontSize: '12px', marginBottom: '8px', color: 'rgba(254,240,138,0.7)' }}>Texture: <span {...NT}>{c.texture}%</span></label>
+                              <input type="range" min="0" max="100" value={c.texture} onChange={(e) => { const v = parseInt(e.target.value); setLayers(pr => ({ ...pr, [t]: { ...pr[t], texture: v } })); sendParam(`${t}_texture`, v / 100); }} />
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* ===== NATURE TAB ===== */}
+            {activeTab === 'nature' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <div style={{ borderRadius: '8px', padding: '16px', marginBottom: '16px', background: 'linear-gradient(90deg,rgba(250,204,21,0.1),rgba(253,224,71,0.1))', border: '2px solid rgba(250,204,21,0.3)' }}>
+                  <p style={{ color: '#fef08a', fontSize: '12px', margin: 0 }}>🌿 <strong>Nature Sounds:</strong> Add realistic nature ambience to your mix. These are your own high-quality recordings that loop seamlessly. &nbsp;·&nbsp; 🎧 Headphones bring every detail to life</p>
+                </div>
+                {['rain', 'storm', 'ocean', 'wind', 'fire', 'waterfall', 'river', 'nightforest', 'nightingale'].map((soundKey) => {
+                  const soundConfig = natureSounds[soundKey];
+                  const soundNames = {
+                    rain: { name: '🌧️ Rain', desc: 'Gentle rain sounds' },
+                    storm: { name: '⛈️ Thunderstorm', desc: 'Intense thunderstorm' },
+                    ocean: { name: '🌊 Ocean Waves', desc: 'Calm ocean waves with birds' },
+                    wind: { name: '💨 Wind', desc: 'Soft wind breeze' },
+                    fire: { name: '🔥 Campfire', desc: 'Crackling fire sounds' },
+                    waterfall: { name: '💧 Waterfall', desc: 'Flowing waterfall' },
+                    river: { name: '🏞️ River in Forest', desc: 'River flowing through forest' },
+                    nightforest: { name: '🌙 Night Forest', desc: 'Forest at night with insects' },
+                    nightingale: { name: '🐦 Nightingale', desc: 'Pure nightingale song in forest' }
+                  };
+                  const info = soundNames[soundKey];
+                  return (
+                    <div
+                      key={soundKey}
+                      style={{
+                        padding: '16px', borderRadius: '8px', transition: 'all 0.3s',
+                        background: 'rgba(30,41,59,0.5)',
+                        border: soundConfig.enabled ? '2px solid rgba(250,204,21,0.8)' : '2px solid rgba(250,204,21,0.2)',
+                        overflow: 'visible', textAlign: 'left', cursor: 'pointer'
+                      }}
+                      onClick={() => handleNatureToggle(soundKey, !soundConfig.enabled)}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                        <div>
+                          <h4 style={{ color: '#fef08a', fontWeight: 500, fontSize: '14px', margin: '0 0 2px 0' }}>{info.name}</h4>
+                          <p style={{ fontSize: '12px', color: 'rgba(254,240,138,0.6)', margin: 0 }}>{info.desc}</p>
+                        </div>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                          <input type="checkbox" checked={soundConfig.enabled}
+                            onClick={(e) => e.stopPropagation()}
+                            onChange={(e) => handleNatureToggle(soundKey, e.target.checked)} />
+                          <span style={{ fontSize: '12px', color: 'rgba(254,240,138,0.7)' }}>Enable</span>
+                        </label>
+                      </div>
+                      {soundConfig.enabled && (
+                        <div style={{ marginTop: '12px', paddingBottom: '4px' }}>
+                          <label style={{ display: 'block', fontSize: '12px', marginBottom: '4px', color: 'rgba(254,240,138,0.7)' }}>Volume: <span {...NT}>{soundConfig.volume}%</span></label>
+                          <input type="range" min="0" max="100" value={soundConfig.volume}
+                            onChange={(e) => setNatureSounds(prev => ({ ...prev, [soundKey]: { ...prev[soundKey], volume: parseInt(e.target.value) } }))} />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* ===== BRAINWAVES TAB ===== */}
+            {activeTab === 'brainwaves' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <div style={{ borderRadius: '8px', padding: '16px', marginBottom: '16px', background: 'linear-gradient(90deg,rgba(250,204,21,0.1),rgba(253,224,71,0.1))', border: '2px solid rgba(250,204,21,0.3)' }}>
+                  <p style={{ color: '#fef08a', fontSize: '12px', margin: 0 }}>🧠 <strong>Brainwave Entrainment:</strong> Binaural beats that guide your brain into specific states. Each frequency targets different mental states for optimal results. &nbsp;·&nbsp; 🎧 Headphones enhance the binaural effect</p>
+                </div>
+                {Object.entries(brainwaves).map(([t, c]) => (
+                  <div
+                    key={t}
+                    style={{ padding: '16px', borderRadius: '8px', transition: 'all 0.3s', background: 'rgba(30,41,59,0.5)', border: '2px solid rgba(250,204,21,0.2)', overflow: 'visible', textAlign: 'left', cursor: 'pointer' }}
+                    onClick={() => setBrainwaves(pr => ({ ...pr, [t]: { ...pr[t], enabled: !pr[t].enabled } }))}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                      <label style={{ color: '#fef08a', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', cursor: 'pointer', textTransform: 'capitalize' }}>
+                        <input type="checkbox" checked={c.enabled}
+                          onClick={(e) => e.stopPropagation()}
+                          onChange={(e) => setBrainwaves(pr => ({ ...pr, [t]: { ...pr[t], enabled: e.target.checked } }))} />
+                        {t} Wave
+                      </label>
+                    </div>
+                    <p style={{ fontSize: '12px', color: 'rgba(254,240,138,0.6)', margin: '0 0 12px 0' }}>{getBrainDesc(t)}</p>
+                    {c.enabled && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                        <div style={{ paddingBottom: '4px' }}>
+                          <label style={{ display: 'block', fontSize: '12px', marginBottom: '8px', color: 'rgba(254,240,138,0.7)' }}>Carrier Frequency: <span {...NT}>{c.carrier} Hz</span></label>
+                          <input type="range" min="100" max="400" value={c.carrier} onChange={(e) => { const v = parseInt(e.target.value); setBrainwaves(pr => ({ ...pr, [t]: { ...pr[t], carrier: v } })); sendParam(`${t}_carrier`, v); }} />
+                        </div>
+                        <div style={{ paddingBottom: '4px' }}>
+                          <label style={{ display: 'block', fontSize: '12px', marginBottom: '8px', color: 'rgba(254,240,138,0.7)' }}>Beat Frequency: <span {...NT}>{c.beat} Hz</span></label>
+                          <input type="range" min="1" max="40" value={c.beat} onChange={(e) => { const v = parseInt(e.target.value); setBrainwaves(pr => ({ ...pr, [t]: { ...pr[t], beat: v } })); sendParam(`${t}_beat`, v); }} />
+                        </div>
+                        <div style={{ paddingBottom: '4px' }}>
+                          <label style={{ display: 'block', fontSize: '12px', marginBottom: '8px', color: 'rgba(254,240,138,0.7)' }}>Wave Intensity: <span {...NT}>{c.intensity}%</span></label>
+                          <input type="range" min="0" max="100" value={c.intensity} onChange={(e) => { const v = parseInt(e.target.value); setBrainwaves(pr => ({ ...pr, [t]: { ...pr[t], intensity: v } })); sendParam(`${t}_intensity`, v / 100); }} />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* ===== EXPORT TAB ===== */}
+            {activeTab === 'export' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                {isLimited ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40px 16px', textAlign: 'center', gap: '20px' }}>
+                    <div style={{ fontSize: '48px' }}>🔒</div>
+                    <div>
+                      <p style={{ color: '#fef08a', fontWeight: 700, fontSize: '18px', margin: '0 0 4px 0' }}>Export is a Pro feature</p>
+                      <p style={{ fontSize: '14px', color: '#94a3b8', margin: 0 }}>Upgrade to export unlimited audio in WAV 24-bit or MP3 at any duration.</p>
+                    </div>
+                    <div style={{ width: '100%', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', textAlign: 'left' }}>
+                      <div style={{ borderRadius: '12px', padding: '16px', background: 'rgba(30,41,59,0.7)', border: '2px solid rgba(71,85,105,0.5)' }}>
+                        <p style={{ fontWeight: 700, fontSize: '12px', color: '#cbd5e1', margin: '0 0 10px 0' }}>FREE</p>
+                        <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '7px' }}>
+                          <li style={{ display: 'flex', gap: '8px', fontSize: '11px', color: '#94a3b8' }}><span style={{ color: '#64748b', flexShrink: 0 }}>•</span>10 minute sessions</li>
+                          <li style={{ display: 'flex', gap: '8px', fontSize: '11px', color: '#94a3b8' }}><span style={{ color: '#64748b', flexShrink: 0 }}>•</span>Basic sound layers</li>
+                          <li style={{ display: 'flex', gap: '8px', fontSize: '11px', color: '#64748b' }}><span style={{ color: '#f87171', flexShrink: 0 }}>✕</span>No audio export</li>
+                          <li style={{ display: 'flex', gap: '8px', fontSize: '11px', color: '#64748b' }}><span style={{ color: '#f87171', flexShrink: 0 }}>✕</span>Limited generator access</li>
+                          <li style={{ display: 'flex', gap: '8px', fontSize: '11px', color: '#64748b' }}><span style={{ color: '#f87171', flexShrink: 0 }}>✕</span>No commercial usage</li>
+                        </ul>
+                      </div>
+                      <div style={{ borderRadius: '12px', padding: '16px', position: 'relative', background: 'rgba(250,204,21,0.1)', border: '2px solid rgba(250,204,21,0.6)' }}>
+                        <div style={{ position: 'absolute', borderRadius: '9999px', top: '-10px', left: '50%', transform: 'translateX(-50%)', background: '#facc15', color: '#000', fontSize: '0.65rem', fontWeight: 700, padding: '2px 8px', whiteSpace: 'nowrap' }}>RECOMMENDED</div>
+                        <p style={{ fontWeight: 700, fontSize: '12px', color: '#fde047', margin: '0 0 2px 0' }}>PRO</p>
+                        <p style={{ fontSize: '11px', fontWeight: 600, color: 'rgba(250,204,21,0.8)', margin: '0 0 10px 0' }}>9.99€/month</p>
+                        <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '7px' }}>
+                          <li style={{ display: 'flex', gap: '8px', fontSize: '11px', color: '#e2e8f0' }}><span style={{ color: '#facc15', flexShrink: 0 }}>✓</span>Unlimited sessions</li>
+                          <li style={{ display: 'flex', gap: '8px', fontSize: '11px', color: '#e2e8f0' }}><span style={{ color: '#facc15', flexShrink: 0 }}>✓</span>Unlimited audio export</li>
+                          <li style={{ display: 'flex', gap: '8px', fontSize: '11px', color: '#e2e8f0' }}><span style={{ color: '#facc15', flexShrink: 0 }}>✓</span>Export WAV 24-bit or MP3</li>
+                          <li style={{ display: 'flex', gap: '8px', fontSize: '11px', color: '#e2e8f0' }}><span style={{ color: '#facc15', flexShrink: 0 }}>✓</span>Commercial usage allowed</li>
+                          <li style={{ display: 'flex', gap: '8px', fontSize: '11px', color: '#e2e8f0' }}><span style={{ color: '#facc15', flexShrink: 0 }}>✓</span>Royalty-free audio</li>
+                          <li style={{ display: 'flex', gap: '8px', fontSize: '11px', color: '#e2e8f0' }}><span style={{ color: '#facc15', flexShrink: 0 }}>✓</span>High-quality rendering</li>
+                          <li style={{ display: 'flex', gap: '8px', fontSize: '11px', color: '#e2e8f0' }}><span style={{ color: '#facc15', flexShrink: 0 }}>✓</span>Priority feature updates</li>
+                        </ul>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => window.location.href = `https://buy.stripe.com/bJebJ1eMgdmxcPf5r8b3q00?success_url=${encodeURIComponent(window.location.origin + '?upgraded=true')}`}
+                      style={{ width: '100%', padding: '16px', borderRadius: '12px', fontWeight: 700, fontSize: '18px', background: 'linear-gradient(to right,#facc15,#fde047)', color: '#000', border: '2px solid rgba(234,179,8,0.5)', boxShadow: '0 4px 6px rgba(250,204,21,0.3)', cursor: 'pointer', transition: 'all 0.3s' }}
+                    >
+                      ⚡ Upgrade to Pro — 9.99€/month
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <div style={{ padding: '20px', borderRadius: '8px', background: 'rgba(30,41,59,0.5)', border: '2px solid rgba(250,204,21,0.2)' }}>
+                      <label style={{ display: 'block', color: '#fef08a', fontWeight: 500, fontSize: '14px', marginBottom: '12px', textAlign: 'left' }}>Quality</label>
+                      <select
+                        value={exportConfig.format}
+                        onChange={(e) => setExportConfig(pr => ({ ...pr, format: e.target.value }))}
+                        style={{ width: '100%', padding: '12px 16px', borderRadius: '8px', fontSize: '14px', background: '#0f172a', color: '#fef9c3', border: '2px solid rgba(250,204,21,0.3)', outline: 'none', boxSizing: 'border-box' }}
+                      >
+                        <option value="wav24_44">WAV 24-bit / 44.1kHz</option>
+                        <option value="wav24_48">WAV 24-bit / 48kHz</option>
+                        <option value="mp3_320">MP3 / 320 kbps</option>
+                        <option value="mp3_256">MP3 / 256 kbps</option>
+                        <option value="mp3_192">MP3 / 192 kbps</option>
+                        <option value="mp3_160">MP3 / 160 kbps</option>
+                        <option value="mp3_128">MP3 / 128 kbps</option>
+                      </select>
+                    </div>
+                    <div style={{ padding: '20px', borderRadius: '8px', background: 'rgba(30,41,59,0.5)', border: '2px solid rgba(250,204,21,0.2)' }}>
+                      <label style={{ display: 'block', color: '#fef08a', fontWeight: 500, fontSize: '14px', marginBottom: '12px', textAlign: 'left' }}>Duration</label>
+                      <ExportDurationButtons format={exportConfig.format} />
+                      <div>
+                        <label style={{ display: 'block', fontSize: '12px', marginBottom: '8px', color: 'rgba(254,240,138,0.7)', textAlign: 'left' }}>Custom (seconds): <span {...NT}>{exportConfig.duration}</span></label>
+                        <input
+                          type="number" value={exportConfig.duration}
+                          onChange={(e) => setExportConfig(pr => ({ ...pr, duration: parseInt(e.target.value) || 60 }))}
+                          style={{ width: '100%', padding: '12px 16px', borderRadius: '8px', fontSize: '14px', background: '#0f172a', color: '#fef9c3', border: '2px solid rgba(250,204,21,0.3)', outline: 'none', boxSizing: 'border-box' }}
+                          min="10" max="28800"
+                        />
+                        <p style={{ fontSize: '12px', color: 'rgba(254,240,138,0.6)', margin: '8px 0 0 0', textAlign: 'left' }}>Range: <span {...NT}>10</span> seconds to <span {...NT}>8</span> hours</p>
+                      </div>
+                    </div>
+                    {typeof Notification !== 'undefined' && Notification.permission !== 'granted' && (
+                      <button onClick={requestNotificationPermission} style={{ width: '100%', padding: '12px 20px', borderRadius: '8px', fontWeight: 600, fontSize: '14px', background: 'linear-gradient(to right,#1e293b,#0f172a)', color: '#fff', border: '2px solid rgba(250,204,21,0.3)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', transition: 'all 0.3s', boxSizing: 'border-box' }}>
+                        🔔 Enable notifications (recommended for long exports)
+                      </button>
+                    )}
+                    {notificationsEnabled && (
+                      <div style={{ borderRadius: '8px', padding: '16px', background: 'rgba(34,197,94,0.1)', border: '2px solid rgba(74,222,128,0.3)' }}>
+                        <p style={{ fontSize: '12px', textAlign: 'center', color: '#bbf7d0', margin: 0 }}>✅ Notifications enabled - You'll be notified when export completes</p>
+                      </div>
+                    )}
+                    <button
+                      onClick={expSound} disabled={isGenerating}
+                      style={{ width: '100%', padding: '16px 24px', borderRadius: '12px', fontWeight: 700, fontSize: '18px', background: 'linear-gradient(to right,#facc15,#fde047)', color: '#000', border: '2px solid rgba(234,179,8,0.5)', boxShadow: '0 4px 6px rgba(250,204,21,0.3)', cursor: isGenerating ? 'not-allowed' : 'pointer', opacity: isGenerating ? 0.5 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', transition: 'all 0.3s', boxSizing: 'border-box' }}
+                    >
+                      {isGenerating
+                        ? (<><div style={{ width: '20px', height: '20px', border: '2px solid rgba(0,0,0,0.3)', borderTopColor: '#000', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />Exporting...</>)
+                        : (<><Download style={{ width: '24px', height: '24px' }} />Export</>)
+                      }
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+
+          </div>
+        </div>
+
+        {/* ── EXPORT PROGRESS BAR ── */}
+        {(exportProgress.stage !== '' || exportProgress.percentage === 100) && (
+          <ExportProgressBar exportProgress={exportProgress} formatTime={formatTime} NT={NT} />
+        )}
+
+        {/* ── FADE OUT WARNING ── */}
+        {isFadingOut && isLimited && (
+          <div style={{
+            margin: `0 ${px} 0 ${px}`,
+            padding: '12px 20px', borderRadius: '12px',
+            background: 'linear-gradient(90deg, rgba(250,204,21,0.15), rgba(234,179,8,0.1))',
+            border: '1px solid rgba(250,204,21,0.5)',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px',
+            animation: 'pulse 2s ease-in-out infinite',
+          }}>
+            <p style={{ fontSize: '13px', color: '#fef08a', margin: 0 }}>
+              ⏳ <strong>Sesión terminando...</strong> El audio se está desvaneciendo. Actualiza a Pro para continuar.
+            </p>
+            <button
+              onClick={() => { window.location.href = `https://buy.stripe.com/bJebJ1eMgdmxcPf5r8b3q00?success_url=${encodeURIComponent(window.location.origin + '?upgraded=true')}`; }}
+              style={{ padding: '6px 14px', borderRadius: '8px', background: '#facc15', color: '#000', border: 'none', fontWeight: 700, fontSize: '12px', cursor: 'pointer', whiteSpace: 'nowrap' }}
+            >
+              ⚡ Upgrade
+            </button>
+          </div>
+        )}
+
+        {/* ── PLAY/STOP BUTTON ── */}
+        <div style={{ padding: `${isMobile ? '16px' : '24px'} ${px}`, borderTop: '1px solid rgba(250,204,21,0.2)', background: 'linear-gradient(to top,rgba(2,6,23,0.5),rgba(15,23,42,0.5))' }}>
+          <button
+            onClick={play}
+            disabled={isGenerating || isTransitioning}
+            style={isPlaying ? {
+              width: '100%', padding: isMobile ? '14px' : '16px',
+              borderRadius: '12px', fontWeight: 700, fontSize: isMobile ? '16px' : '18px',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px',
+              cursor: isGenerating || isTransitioning ? 'not-allowed' : 'pointer',
+              opacity: isGenerating || isTransitioning ? 0.5 : 1, transition: 'all 0.3s',
+              background: 'linear-gradient(to right,#dc2626,#ef4444)', color: '#fff',
+              border: '2px solid rgba(239,68,68,0.5)', boxShadow: '0 4px 6px rgba(239,68,68,0.3)', boxSizing: 'border-box',
+            } : {
+              width: '100%', padding: isMobile ? '14px' : '16px',
+              borderRadius: '12px', fontWeight: 700, fontSize: isMobile ? '16px' : '18px',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px',
+              cursor: isGenerating || isTransitioning ? 'not-allowed' : 'pointer',
+              opacity: isGenerating || isTransitioning ? 0.5 : 1, transition: 'all 0.3s',
+              background: 'linear-gradient(to right,#facc15,#fde047)', color: '#000',
+              border: '2px solid rgba(234,179,8,0.5)', boxShadow: '0 4px 6px rgba(250,204,21,0.5)', boxSizing: 'border-box',
+            }}
+          >
+            {isGenerating
+              ? (<><div style={{ width: '20px', height: '20px', border: '2px solid rgba(0,0,0,0.3)', borderTopColor: '#000', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />Preparing...</>)
+              : isPlaying
+                ? (<><Square style={{ width: '24px', height: '24px' }} />Stop</>)
+                : (<><Play style={{ width: '24px', height: '24px' }} />Play</>)
+            }
+          </button>
+          <div style={{ marginTop: '12px', fontSize: '12px', textAlign: 'center', color: 'rgba(254,240,138,0.6)' }}>✨ All changes update in real-time while playing</div>
+        </div>
 
       </div>
 
-      {/* FREE LIMIT MODAL */}
+      {/* ── FREE LIMIT MODAL ── */}
       {showLimitModal && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)' }}>
           <div style={{ borderRadius: '16px', padding: '32px', width: '90%', maxWidth: '512px', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', background: '#0f172a', border: '2px solid rgba(250,204,21,0.4)', boxShadow: '0 25px 50px rgba(0,0,0,0.5)' }}>
-            <h2 style={{ fontSize: '24px', fontWeight: 700, marginBottom: '24px', width: '100%', textAlign: 'center', color: '#facc15', margin: '0 0 24px 0' }}>⏳ Free Limit Reached</h2>
+            <h2 style={{ fontSize: '24px', fontWeight: 700, color: '#facc15', margin: '0 0 24px 0' }}>⏳ Free Limit Reached</h2>
             <div style={{ width: '100%', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '24px' }}>
               <div style={{ borderRadius: '12px', padding: '16px', textAlign: 'left', background: 'rgba(30,41,59,0.7)', border: '2px solid rgba(71,85,105,0.5)' }}>
                 <p style={{ fontWeight: 700, fontSize: '13px', color: '#cbd5e1', margin: '0 0 10px 0' }}>FREE</p>
