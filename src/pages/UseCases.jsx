@@ -19,13 +19,20 @@ export default function UseCases() {
       <style>{`
         *, *::before, *::after { box-sizing: border-box !important; }
         html, body, #root { margin: 0 !important; padding: 0 !important; width: 100% !important; height: 100% !important; overflow: hidden !important; }
+
+        @media (max-width: 768px) {
+          html, body, #root { height: auto !important; overflow-y: auto !important; overflow-x: hidden !important; }
+          .cases-wrap { height: auto !important; overflow: visible !important; }
+          .cases-inner { align-items: flex-start !important; padding: 28px 20px 48px 20px !important; }
+          .cases-grid { grid-template-columns: repeat(2, 1fr) !important; }
+        }
       `}</style>
       <Navbar />
-      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 32px 60px 32px', width: '100%' }}>
+      <div className="cases-wrap" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 32px 60px 32px', width: '100%' }}>
         <div style={{ width: '100%', maxWidth: '960px' }}>
           <h1 style={{ fontSize: '32px', fontWeight: 900, margin: '0 0 4px 0', textAlign: 'center', background: 'linear-gradient(to right,#fef9c3,#fde047,#facc15)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Use Cases</h1>
           <p style={{ color: 'rgba(254,240,138,0.6)', margin: '0 0 14px 0', fontSize: '13px', textAlign: 'center' }}>Neurial adapts to whatever mental state you need.</p>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
+          <div className="cases-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
             {CASES.map(([icon, title, desc]) =>
               desc === null ? (
                 <Link key={title} to="/app" style={{ padding: '16px', borderRadius: '10px', background: 'linear-gradient(to right,#facc15,#fde047)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', gap: '6px', textDecoration: 'none', boxShadow: '0 8px 20px rgba(250,204,21,0.3)' }}>

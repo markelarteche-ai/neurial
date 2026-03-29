@@ -9,13 +9,21 @@ export default function Pricing() {
       <style>{`
         *, *::before, *::after { box-sizing: border-box !important; }
         html, body, #root { margin: 0 !important; padding: 0 !important; width: 100% !important; height: 100% !important; overflow: hidden !important; }
+
+        @media (max-width: 768px) {
+          html, body, #root { height: auto !important; overflow-y: auto !important; overflow-x: hidden !important; }
+          .pricing-wrap { height: auto !important; overflow: visible !important; }
+          .pricing-inner { align-items: flex-start !important; padding: 28px 20px 48px 20px !important; }
+          .pricing-grid { grid-template-columns: 1fr !important; }
+          .pricing-pro { margin-top: 10px !important; }
+        }
       `}</style>
       <Navbar />
-      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 32px 60px 32px', width: '100%' }}>
+      <div className="pricing-wrap" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 32px 60px 32px', width: '100%' }}>
         <div style={{ width: '100%', maxWidth: '900px' }}>
           <h1 style={{ fontSize: '34px', fontWeight: 900, margin: '0 0 4px 0', textAlign: 'center', background: 'linear-gradient(to right,#fef9c3,#fde047,#facc15)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Pricing</h1>
           <p style={{ color: 'rgba(254,240,138,0.6)', margin: '0 0 20px 0', fontSize: '14px', textAlign: 'center' }}>Start free. Upgrade when you need more.</p>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+          <div className="pricing-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
             <div style={{ padding: '24px', borderRadius: '12px', background: 'rgba(30,41,59,0.7)', border: '2px solid rgba(71,85,105,0.5)' }}>
               <p style={{ color: '#cbd5e1', fontWeight: 700, fontSize: '18px', margin: '0 0 4px 0' }}>Free</p>
               <p style={{ color: '#475569', fontSize: '28px', fontWeight: 900, margin: '0 0 24px 0' }}>0€</p>
@@ -28,7 +36,7 @@ export default function Pricing() {
                 ))}
               </ul>
             </div>
-            <div style={{ padding: '24px', borderRadius: '12px', position: 'relative', background: 'rgba(250,204,21,0.08)', border: '2px solid rgba(250,204,21,0.5)', boxShadow: '0 8px 32px rgba(250,204,21,0.1)' }}>
+            <div className="pricing-pro" style={{ padding: '24px', borderRadius: '12px', position: 'relative', background: 'rgba(250,204,21,0.08)', border: '2px solid rgba(250,204,21,0.5)', boxShadow: '0 8px 32px rgba(250,204,21,0.1)' }}>
               <div style={{ position: 'absolute', top: '-14px', left: '50%', transform: 'translateX(-50%)', background: '#facc15', color: '#000', fontSize: '11px', fontWeight: 700, padding: '4px 14px', borderRadius: '9999px', whiteSpace: 'nowrap' }}>RECOMMENDED</div>
               <p style={{ color: '#fde047', fontWeight: 700, fontSize: '18px', margin: '0 0 4px 0' }}>Pro</p>
               <p style={{ color: '#facc15', fontSize: '28px', fontWeight: 900, margin: '0 0 24px 0' }}>9.99€/month</p>
