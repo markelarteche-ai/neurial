@@ -1724,14 +1724,14 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
             {activeTab === 'layers' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 <div style={{ borderRadius: '8px', padding: '16px', marginBottom: '16px', background: 'linear-gradient(90deg,rgba(250,204,21,0.1),rgba(253,224,71,0.1))', border: '2px solid rgba(250,204,21,0.3)' }}>
-                  `<p style={{ color: '#fef08a', fontSize: '12px', margin: 0 }}>
+                  <p style={{ color: '#fef08a', fontSize: '12px', margin: 0 }}>
   🎨 <strong>Sound Colors:</strong> Each noise type has a unique frequency profile. Mix and match to create your perfect soundscape with crystal-clear 3D audio.
   {isMobile ? (
     <span style={{ display: 'block', marginTop: '6px' }}>🎧 Best experienced with headphones on</span>
   ) : (
     <span> &nbsp;·&nbsp; 🎧 Best experienced with headphones on</span>
   )}
-</p>`
+</p>
                 </div>
                 {Object.entries(layers).map(([t, c]) => (
                   <div key={t} style={{ padding: '16px', borderRadius: '8px', transition: 'all 0.3s', background: 'rgba(30,41,59,0.5)', border: '2px solid rgba(250,204,21,0.2)', overflow: 'visible', textAlign: 'left' }}>
@@ -1824,14 +1824,14 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
             {activeTab === 'brainwaves' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 <div style={{ borderRadius: '8px', padding: '16px', marginBottom: '16px', background: 'linear-gradient(90deg,rgba(250,204,21,0.1),rgba(253,224,71,0.1))', border: '2px solid rgba(250,204,21,0.3)' }}>
-                  `<p style={{ color: '#fef08a', fontSize: '12px', margin: 0 }}>
+                  <p style={{ color: '#fef08a', fontSize: '12px', margin: 0 }}>
   🧠 <strong>Brainwave Entrainment:</strong> Binaural beats that guide your brain into specific states. Each frequency targets different mental states for optimal results.
   {isMobile ? (
     <span style={{ display: 'block', marginTop: '6px' }}>🎧 Headphones enhance the binaural effect</span>
   ) : (
     <span> &nbsp;·&nbsp; 🎧 Headphones enhance the binaural effect</span>
   )}
-</p>`
+</p>
                 </div>
                 {Object.entries(brainwaves).map(([t, c]) => (
                   <div
