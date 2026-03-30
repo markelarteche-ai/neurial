@@ -9,29 +9,23 @@ export default function Navbar() {
         @media (max-width: 768px) {
           .neurial-navbar {
             padding: 12px 16px !important;
-            flex-wrap: wrap !important;
-            gap: 10px !important;
+            flex-direction: column !important;
+            align-items: flex-start !important;
+            gap: 8px !important;
           }
           .neurial-nav-links {
-            gap: 14px !important;
-            flex-wrap: nowrap !important;
-            overflow-x: auto !important;
-            -webkit-overflow-scrolling: touch !important;
-            scrollbar-width: none !important;
             width: 100% !important;
-          }
-          .neurial-nav-links::-webkit-scrollbar {
-            display: none !important;
+            gap: 0 !important;
+            justify-content: space-between !important;
           }
           .neurial-nav-link {
-            font-size: 13px !important;
+            font-size: 12px !important;
             white-space: nowrap !important;
-            flex-shrink: 0 !important;
           }
           .neurial-open-app {
-            padding: 6px 12px !important;
-            font-size: 13px !important;
-            flex-shrink: 0 !important;
+            padding: 5px 10px !important;
+            font-size: 12px !important;
+            border-radius: 8px !important;
           }
         }
       `}</style>
@@ -58,7 +52,6 @@ export default function Navbar() {
             WebkitBackgroundClip: 'text',
             WebkitTextFillColor: 'transparent',
             textDecoration: 'none',
-            flexShrink: 0,
           }}
         >
           NEURIAL
@@ -96,7 +89,7 @@ export default function Navbar() {
               whiteSpace: 'nowrap',
             }}
           >
-            Open App
+            Open
           </Link>
         </div>
       </div>

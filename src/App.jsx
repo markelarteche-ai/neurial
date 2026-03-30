@@ -1649,7 +1649,7 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
                   onClick={() => window.location.href = `https://buy.stripe.com/bJebJ1eMgdmxcPf5r8b3q00?success_url=${encodeURIComponent(window.location.origin + '?upgraded=true')}`}
                   style={{ padding: isMobile ? '7px 12px' : '8px 16px', borderRadius: '12px', fontWeight: 700, fontSize: isMobile ? '13px' : '14px', background: 'linear-gradient(to right,#facc15,#fde047)', color: '#000', border: '2px solid rgba(234,179,8,0.5)', boxShadow: '0 4px 6px rgba(250,204,21,0.3)', cursor: 'pointer', transition: 'all 0.3s', whiteSpace: 'nowrap' }}
                 >
-                  {isMobile ? '⚡ PRO' : '⚡ Upgrade'}
+                  {isMobile ? 'Upgrade' : '⚡ Upgrade'}
                 </button>
                 {!isMobile && onSignOut && <button onClick={onSignOut} style={{ padding: '6px 12px', borderRadius: '8px', fontSize: '12px', color: '#94a3b8', border: '1px solid #475569', background: 'transparent', cursor: 'pointer', whiteSpace: 'nowrap' }}>Sign out</button>}
               </div>
