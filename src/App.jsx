@@ -1649,7 +1649,7 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
                   onClick={() => window.location.href = `https://buy.stripe.com/bJebJ1eMgdmxcPf5r8b3q00?success_url=${encodeURIComponent(window.location.origin + '?upgraded=true')}`}
                   style={{ padding: isMobile ? '7px 12px' : '8px 16px', borderRadius: '12px', fontWeight: 700, fontSize: isMobile ? '13px' : '14px', background: 'linear-gradient(to right,#facc15,#fde047)', color: '#000', border: '2px solid rgba(234,179,8,0.5)', boxShadow: '0 4px 6px rgba(250,204,21,0.3)', cursor: 'pointer', transition: 'all 0.3s', whiteSpace: 'nowrap' }}
                 >
-                  ⚡ Upgrade
+                  {isMobile ? '⚡ PRO' : '⚡ Upgrade'}
                 </button>
                 {!isMobile && onSignOut && <button onClick={onSignOut} style={{ padding: '6px 12px', borderRadius: '8px', fontSize: '12px', color: '#94a3b8', border: '1px solid #475569', background: 'transparent', cursor: 'pointer', whiteSpace: 'nowrap' }}>Sign out</button>}
               </div>
@@ -1724,7 +1724,14 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
             {activeTab === 'layers' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 <div style={{ borderRadius: '8px', padding: '16px', marginBottom: '16px', background: 'linear-gradient(90deg,rgba(250,204,21,0.1),rgba(253,224,71,0.1))', border: '2px solid rgba(250,204,21,0.3)' }}>
-                  <p style={{ color: '#fef08a', fontSize: '12px', margin: 0 }}>🎨 <strong>Sound Colors:</strong> Each noise type has a unique frequency profile. Mix and match to create your perfect soundscape with crystal-clear 3D audio. &nbsp;·&nbsp; 🎧 Best experienced with headphones on</p>
+                  `<p style={{ color: '#fef08a', fontSize: '12px', margin: 0 }}>
+  🎨 <strong>Sound Colors:</strong> Each noise type has a unique frequency profile. Mix and match to create your perfect soundscape with crystal-clear 3D audio.
+  {isMobile ? (
+    <span style={{ display: 'block', marginTop: '6px' }}>🎧 Best experienced with headphones on</span>
+  ) : (
+    <span> &nbsp;·&nbsp; 🎧 Best experienced with headphones on</span>
+  )}
+</p>`
                 </div>
                 {Object.entries(layers).map(([t, c]) => (
                   <div key={t} style={{ padding: '16px', borderRadius: '8px', transition: 'all 0.3s', background: 'rgba(30,41,59,0.5)', border: '2px solid rgba(250,204,21,0.2)', overflow: 'visible', textAlign: 'left' }}>
@@ -1817,7 +1824,14 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
             {activeTab === 'brainwaves' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 <div style={{ borderRadius: '8px', padding: '16px', marginBottom: '16px', background: 'linear-gradient(90deg,rgba(250,204,21,0.1),rgba(253,224,71,0.1))', border: '2px solid rgba(250,204,21,0.3)' }}>
-                  <p style={{ color: '#fef08a', fontSize: '12px', margin: 0 }}>🧠 <strong>Brainwave Entrainment:</strong> Binaural beats that guide your brain into specific states. Each frequency targets different mental states for optimal results. &nbsp;·&nbsp; 🎧 Headphones enhance the binaural effect</p>
+                  `<p style={{ color: '#fef08a', fontSize: '12px', margin: 0 }}>
+  🧠 <strong>Brainwave Entrainment:</strong> Binaural beats that guide your brain into specific states. Each frequency targets different mental states for optimal results.
+  {isMobile ? (
+    <span style={{ display: 'block', marginTop: '6px' }}>🎧 Headphones enhance the binaural effect</span>
+  ) : (
+    <span> &nbsp;·&nbsp; 🎧 Headphones enhance the binaural effect</span>
+  )}
+</p>`
                 </div>
                 {Object.entries(brainwaves).map(([t, c]) => (
                   <div
