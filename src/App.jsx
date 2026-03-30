@@ -535,45 +535,54 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
   ]);
 
   useEffect(() => {
-    if (!isMobile) return;
-    async function initBrainwavesMobile(){
-      const ctx = mobileEngineRef.current?.ctx;
-      if (!ctx) return;
-      await preloadNatureSounds();
-      Object.entries(brainwaves).forEach(([type, cfg]) => {
-        if (cfg.enabled) {
-          if (!brainwaveOscRefs.current[type]) {
-            const oscL = ctx.createOscillator();
-            const oscR = ctx.createOscillator();
-            const gain = ctx.createGain();
-            const panL = ctx.createStereoPanner();
-            const panR = ctx.createStereoPanner();
-            panL.pan.value = -1;
-            panR.pan.value = 1;
-            oscL.frequency.value = cfg.carrier;
-            oscR.frequency.value = cfg.carrier + cfg.beat;
-            gain.gain.value = (cfg.intensity / 100) * 0.2;
-            oscL.connect(panL).connect(gain);
-            oscR.connect(panR).connect(gain);
-            gain.connect(ctx.destination);
-            oscL.start();
-            oscR.start();
-            brainwaveOscRefs.current[type] = { oscL, oscR };
-            brainwaveGainRefs.current[type] = gain;
-          }
-        } else {
-          const osc = brainwaveOscRefs.current[type];
-          if (osc) {
-            osc.oscL.stop();
-            osc.oscR.stop();
-            delete brainwaveOscRefs.current[type];
-            delete brainwaveGainRefs.current[type];
-          }
-        }
-      });
+  if (!isMobile) return;
+
+  async function initBrainwavesMobile() {
+    const engine = mobileEngineRef.current;
+    const ctx = engine?.ctx;
+    if (!ctx) return;
+
+    // Asegurar que el ctx está activo
+    if (ctx.state === 'suspended') {
+      try { await ctx.resume(); } catch {}
     }
-    initBrainwavesMobile();
-  }, [brainwaves]);
+    if (ctx.state !== 'running') return;
+
+    Object.entries(brainwaves).forEach(([type, cfg]) => {
+      if (cfg.enabled) {
+        if (!brainwaveOscRefs.current[type]) {
+          const oscL = ctx.createOscillator();
+          const oscR = ctx.createOscillator();
+          const gain = ctx.createGain();
+          const panL = ctx.createStereoPanner();
+          const panR = ctx.createStereoPanner();
+          panL.pan.value = -1;
+          panR.pan.value = 1;
+          oscL.frequency.value = cfg.carrier;
+          oscR.frequency.value = cfg.carrier + cfg.beat;
+          gain.gain.value = (cfg.intensity / 100) * 0.2;
+          oscL.connect(panL); panL.connect(gain);
+          oscR.connect(panR); panR.connect(gain);
+          gain.connect(engine.masterGain); // ← masterGain del engine, no destination
+          oscL.start();
+          oscR.start();
+          brainwaveOscRefs.current[type] = { oscL, oscR };
+          brainwaveGainRefs.current[type] = gain;
+        }
+      } else {
+        const osc = brainwaveOscRefs.current[type];
+        if (osc) {
+          try { osc.oscL.stop(); } catch {}
+          try { osc.oscR.stop(); } catch {}
+          delete brainwaveOscRefs.current[type];
+          delete brainwaveGainRefs.current[type];
+        }
+      }
+    });
+  }
+
+  initBrainwavesMobile();
+}, [brainwaves, isPlaying]); // ← añadir isPlaying como dependencia
 
   useEffect(() => {
     if (!isMobile || !isPlaying || !mobileEngineRef.current) return;
