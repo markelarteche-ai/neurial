@@ -378,14 +378,14 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
   const NT = { translate: 'no', className: 'notranslate' };
 
   const [layers, setLayers] = useState({
-    white: { intensity: 0, bass: 50, volume: 0, texture: 50, brightness: 50 },
-    pink: { intensity: 0, bass: 50, volume: 0, texture: 50, brightness: 50 },
-    brown: { intensity: 60, bass: 50, volume: 0, texture: 50, brightness: 50 },
-    grey: { intensity: 0, bass: 50, volume: 0, texture: 50, brightness: 50 },
-    blue: { intensity: 0, bass: 50, volume: 0, texture: 50, brightness: 50 },
-    violet:{ intensity: 0, bass: 50, volume: 0, texture: 50, brightness: 50 },
-    black: { intensity: 0, bass: 50, volume: 0, texture: 50, brightness: 50 },
-    green: { intensity: 0, bass: 50, volume: 0, texture: 50, brightness: 50 }
+    white: { intensity: 0, bass: 50, volume: 50, texture: 50, brightness: 50 },
+    pink: { intensity: 0, bass: 50, volume: 50, texture: 50, brightness: 50 },
+    brown: { intensity: 60, bass: 50, volume: 50, texture: 50, brightness: 50 },
+    grey: { intensity: 0, bass: 50, volume: 50, texture: 50, brightness: 50 },
+    blue: { intensity: 0, bass: 50, volume: 50, texture: 50, brightness: 50 },
+    violet:{ intensity: 0, bass: 50, volume: 50, texture: 50, brightness: 50 },
+    black: { intensity: 0, bass: 50, volume: 50, texture: 50, brightness: 50 },
+    green: { intensity: 0, bass: 50, volume: 50, texture: 50, brightness: 50 }
   });
 
   const [brainwaves, setBrainwaves] = useState({
