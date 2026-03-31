@@ -542,7 +542,6 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
     const ctx = engine?.ctx;
     if (!ctx) return;
 
-    // Asegurar que el ctx está activo
     if (ctx.state === 'suspended') {
       try { await ctx.resume(); } catch {}
     }
@@ -551,6 +550,7 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
     Object.entries(brainwaves).forEach(([type, cfg]) => {
       if (cfg.enabled) {
         if (!brainwaveOscRefs.current[type]) {
+          // Crear osciladores nuevos
           const oscL = ctx.createOscillator();
           const oscR = ctx.createOscillator();
           const gain = ctx.createGain();
@@ -563,13 +563,22 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
           gain.gain.value = (cfg.intensity / 100) * 0.2;
           oscL.connect(panL); panL.connect(gain);
           oscR.connect(panR); panR.connect(gain);
-          gain.connect(engine.masterGain); // ← masterGain del engine, no destination
+          gain.connect(engine.masterGain);
           oscL.start();
           oscR.start();
           brainwaveOscRefs.current[type] = { oscL, oscR };
           brainwaveGainRefs.current[type] = gain;
+        } else {
+          // ← ACTUALIZAR parámetros en tiempo real si ya existen
+          const { oscL, oscR } = brainwaveOscRefs.current[type];
+          const gain = brainwaveGainRefs.current[type];
+          const t = ctx.currentTime;
+          oscL.frequency.setTargetAtTime(cfg.carrier, t, 0.05);
+          oscR.frequency.setTargetAtTime(cfg.carrier + cfg.beat, t, 0.05);
+          if (gain) gain.gain.setTargetAtTime((cfg.intensity / 100) * 0.2, t, 0.05);
         }
       } else {
+        // Destruir osciladores si se desactiva
         const osc = brainwaveOscRefs.current[type];
         if (osc) {
           try { osc.oscL.stop(); } catch {}
@@ -582,7 +591,7 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
   }
 
   initBrainwavesMobile();
-}, [brainwaves, isPlaying]); // ← añadir isPlaying como dependencia
+}, [brainwaves, isPlaying]);
 
   useEffect(() => {
     if (!isMobile || !isPlaying || !mobileEngineRef.current) return;
@@ -1861,15 +1870,21 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                         <div style={{ paddingBottom: '4px' }}>
                           <label style={{ display: 'block', fontSize: '12px', marginBottom: '8px', color: 'rgba(254,240,138,0.7)' }}>Carrier Frequency: <span {...NT}>{c.carrier} Hz</span></label>
-                          <input type="range" min="100" max="400" value={c.carrier} onChange={(e) => { const v = parseInt(e.target.value); setBrainwaves(pr => ({ ...pr, [t]: { ...pr[t], carrier: v } })); sendParam(`${t}_carrier`, v); }} />
+                          <input type="range" min="100" max="400" value={c.carrier}
+  onClick={(e) => e.stopPropagation()}
+  onChange={(e) => { const v = parseInt(e.target.value); setBrainwaves(pr => ({ ...pr, [t]: { ...pr[t], carrier: v } })); sendParam(`${t}_carrier`, v); }} />
                         </div>
                         <div style={{ paddingBottom: '4px' }}>
                           <label style={{ display: 'block', fontSize: '12px', marginBottom: '8px', color: 'rgba(254,240,138,0.7)' }}>Beat Frequency: <span {...NT}>{c.beat} Hz</span></label>
-                          <input type="range" min="1" max="40" value={c.beat} onChange={(e) => { const v = parseInt(e.target.value); setBrainwaves(pr => ({ ...pr, [t]: { ...pr[t], beat: v } })); sendParam(`${t}_beat`, v); }} />
+                          <input type="range" min="1" max="40" value={c.beat}
+  onClick={(e) => e.stopPropagation()}
+  onChange={(e) => { const v = parseInt(e.target.value); setBrainwaves(pr => ({ ...pr, [t]: { ...pr[t], beat: v } })); sendParam(`${t}_beat`, v); }} />
                         </div>
                         <div style={{ paddingBottom: '4px' }}>
                           <label style={{ display: 'block', fontSize: '12px', marginBottom: '8px', color: 'rgba(254,240,138,0.7)' }}>Wave Intensity: <span {...NT}>{c.intensity}%</span></label>
-                          <input type="range" min="0" max="100" value={c.intensity} onChange={(e) => { const v = parseInt(e.target.value); setBrainwaves(pr => ({ ...pr, [t]: { ...pr[t], intensity: v } })); sendParam(`${t}_intensity`, v / 100); }} />
+                          <input type="range" min="0" max="100" value={c.intensity}
+  onClick={(e) => e.stopPropagation()}
+  onChange={(e) => { const v = parseInt(e.target.value); setBrainwaves(pr => ({ ...pr, [t]: { ...pr[t], intensity: v } })); sendParam(`${t}_intensity`, v / 100); }} />
                         </div>
                       </div>
                     )}
