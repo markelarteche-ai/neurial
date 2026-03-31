@@ -4,6 +4,18 @@ import { MobileAudioEngine } from './audio/MobileAudioEngine';
 
 const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
+// Mobile noise loop URLs — used both for playback and export
+const MOBILE_NOISE_URLS = {
+  white:  '/sounds/mobile_loops/white_noise_loop.mp3',
+  pink:   '/sounds/mobile_loops/pink_noise_loop.mp3',
+  brown:  '/sounds/mobile_loops/brown_noise_loop.mp3',
+  grey:   '/sounds/mobile_loops/grey_noise_loop.mp3',
+  black:  '/sounds/mobile_loops/black_noise_loop.mp3',
+  green:  '/sounds/mobile_loops/green_noise_loop.mp3',
+  blue:   '/sounds/mobile_loops/blue_noise_loop.mp3',
+  violet: '/sounds/mobile_loops/violet_noise_loop.mp3',
+};
+
 // ===================== EXPORT PROGRESS BAR =====================
 const ExportProgressBar = ({ exportProgress, formatTime, NT }) => {
   const [localElapsed, setLocalElapsed] = React.useState(0);
@@ -71,9 +83,10 @@ const ExportProgressBar = ({ exportProgress, formatTime, NT }) => {
             }} />
             <span style={{ color: '#fef08a', fontWeight: 600, fontSize: '14px', letterSpacing: '0.05em' }}>
               {exportProgress.stage === 'loading nature sounds' && '🌿 Loading nature sounds…'}
+              {exportProgress.stage === 'loading noise layers'  && '🎨 Loading noise layers…'}
               {exportProgress.stage === 'rendering'             && '🎵 Rendering audio…'}
               {exportProgress.stage === 'complete'              && '✅ Export complete!'}
-              {!['loading nature sounds','rendering','complete'].includes(exportProgress.stage) && '⏳ Processing…'}
+              {!['loading nature sounds','loading noise layers','rendering','complete'].includes(exportProgress.stage) && '⏳ Processing…'}
             </span>
           </div>
           {isComplete && (
@@ -154,8 +167,6 @@ const ExportProgressBar = ({ exportProgress, formatTime, NT }) => {
 
 // ===================== PRESET LABEL FORMATTER =====================
 const formatPresetName = (key) => {
-  // Handles acronyms: only inserts space between lowercase→uppercase transition
-  // ADHDSupport → "ADHD Support", DeepSleep → "Deep Sleep"
   return key.replace(/([a-z])([A-Z])/g, '$1 $2').trim();
 };
 
@@ -358,6 +369,9 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
   const brainwaveGainRefs = useRef({});
   const mobileEngineRef = useRef(null);
 
+  // ── AUTO-PLAY guard: prevents concurrent ensurePlaying calls ──
+  const autoPlayPendingRef = useRef(false);
+
   useEffect(() => {
     if (!isMobile) return;
     const preload = async () => {
@@ -419,6 +433,10 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
 
   const isPlayingRef = useRef(false);
   useEffect(() => { isPlayingRef.current = isPlaying; }, [isPlaying]);
+
+  // Keep a ref to layers so ensurePlaying callbacks can read current values
+  const layersRef = useRef(layers);
+  useEffect(() => { layersRef.current = layers; }, [layers]);
 
   useEffect(() => {
     if (showLimitModal) {
@@ -550,7 +568,6 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
     Object.entries(brainwaves).forEach(([type, cfg]) => {
       if (cfg.enabled) {
         if (!brainwaveOscRefs.current[type]) {
-          // Crear osciladores nuevos
           const oscL = ctx.createOscillator();
           const oscR = ctx.createOscillator();
           const gain = ctx.createGain();
@@ -569,7 +586,6 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
           brainwaveOscRefs.current[type] = { oscL, oscR };
           brainwaveGainRefs.current[type] = gain;
         } else {
-          // ← ACTUALIZAR parámetros en tiempo real si ya existen
           const { oscL, oscR } = brainwaveOscRefs.current[type];
           const gain = brainwaveGainRefs.current[type];
           const t = ctx.currentTime;
@@ -578,7 +594,6 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
           if (gain) gain.gain.setTargetAtTime((cfg.intensity / 100) * 0.2, t, 0.05);
         }
       } else {
-        // Destruir osciladores si se desactiva
         const osc = brainwaveOscRefs.current[type];
         if (osc) {
           try { osc.oscL.stop(); } catch {}
@@ -820,19 +835,48 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
     });
   };
 
+  // ══════════════════════════════════════════════════════════════
+  // AUTO-PLAY: start audio if not already playing.
+  // Protected by autoPlayPendingRef to prevent concurrent calls
+  // when sliders are moved quickly.
+  // ══════════════════════════════════════════════════════════════
+  const ensurePlaying = async () => {
+    if (isPlayingRef.current || isTransitioning || isGenerating) return;
+    if (autoPlayPendingRef.current) return;
+    autoPlayPendingRef.current = true;
+    try {
+      await play();
+    } finally {
+      autoPlayPendingRef.current = false;
+    }
+  };
+
   const handleNatureToggle = (soundKey, checked) => {
     if (natureToggleLock.current) return;
     natureToggleLock.current = true;
     setTimeout(() => { natureToggleLock.current = false; }, 300);
+
     setNatureSounds(prev => ({
       ...prev,
       [soundKey]: { ...prev[soundKey], enabled: checked }
     }));
+
     if (checked) {
-      const ctx = isMobile ? mobileEngineRef.current?.ctx : audioContextRef.current;
-      if (ctx && ctx.state !== 'closed' && !natureAudioRefs.current[soundKey]) {
-        const currentVolume = natureSoundsRef.current[soundKey]?.volume ?? 70;
-        startNatureSound(soundKey, currentVolume);
+      if (!isPlayingRef.current) {
+        // Start playback first, then attach the nature sound once the engine is ready
+        ensurePlaying().then(() => {
+          const ctx = isMobile ? mobileEngineRef.current?.ctx : audioContextRef.current;
+          if (ctx && ctx.state !== 'closed' && !natureAudioRefs.current[soundKey]) {
+            const currentVolume = natureSoundsRef.current[soundKey]?.volume ?? 70;
+            startNatureSound(soundKey, currentVolume);
+          }
+        });
+      } else {
+        const ctx = isMobile ? mobileEngineRef.current?.ctx : audioContextRef.current;
+        if (ctx && ctx.state !== 'closed' && !natureAudioRefs.current[soundKey]) {
+          const currentVolume = natureSoundsRef.current[soundKey]?.volume ?? 70;
+          startNatureSound(soundKey, currentVolume);
+        }
       }
     } else {
       if (natureAudioRefs.current[soundKey]) {
@@ -869,9 +913,12 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
           try { await engine.ctx.resume(); } catch {}
         }
         mobileEngineRef.current = engine;
-        Object.entries(layers).forEach(([type, cfg]) => {
+
+        // Play layers that have volume > 0 (volume IS the intensity on mobile)
+        Object.entries(layersRef.current).forEach(([type, cfg]) => {
           if (cfg.volume > 0) { engine.playLayer(type, cfg.volume); }
         });
+
         setIsPlaying(true);
         isPlayingRef.current = true;
         if (isLimited) startLimitTimer();
@@ -905,7 +952,8 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
         const node = mixerNodeRef.current;
         if (!node || ctx.state !== 'running') return;
         const t = ctx.currentTime;
-        Object.entries(layers).forEach(([k, c]) => {
+        // Use layersRef so we always have latest values even if called from ensurePlaying
+        Object.entries(layersRef.current).forEach(([k, c]) => {
           node.parameters.get(`${k}_intensity`)?.setValueAtTime((c.intensity ?? 0) / 100, t);
           node.parameters.get(`${k}_volume`)?.setValueAtTime((c.volume ?? 100) / 100, t);
           node.parameters.get(`${k}_bass`)?.setValueAtTime((c.bass ?? 50) / 100, t);
@@ -943,6 +991,16 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
       const engine = mobileEngineRef.current;
       mobileEngineRef.current = null;
       killAllNatureNow();
+      // Stop brainwave oscillators
+      Object.keys(brainwaveOscRefs.current).forEach(type => {
+        const osc = brainwaveOscRefs.current[type];
+        if (osc) {
+          try { osc.oscL.stop(); } catch {}
+          try { osc.oscR.stop(); } catch {}
+        }
+      });
+      brainwaveOscRefs.current = {};
+      brainwaveGainRefs.current = {};
       setIsPlaying(false);
       isPlayingRef.current = false;
       setIsGenerating(false);
@@ -1147,6 +1205,7 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
     const blobParts = [];
     let totalFrames = 0;
 
+    // ── Load nature sound buffers ──────────────────────────────────
     const enabledNatureBuffers = {};
     const enabledNatureEntries = Object.entries(natureSounds).filter(([, cfg]) => cfg.enabled);
     if (enabledNatureEntries.length > 0) {
@@ -1161,17 +1220,50 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
           }
         })
       );
-      setExportProgress(prev => ({ ...prev, stage: 'rendering' }));
     }
+
+    // ── Load mobile noise layer buffers (only on mobile) ──────────
+    // On mobile the worklet DSP is not used; noise is pre-rendered MP3 loops.
+    // We load those same loops here so they appear in the exported file.
+    const enabledNoiseBuffers = {};
+    if (isMobile) {
+      const activeNoiseEntries = Object.entries(layers).filter(([, cfg]) => cfg.volume > 0);
+      if (activeNoiseEntries.length > 0) {
+        setExportProgress(prev => ({ ...prev, stage: 'loading noise layers' }));
+        await Promise.all(
+          activeNoiseEntries.map(async ([noiseKey, cfg]) => {
+            try {
+              const url = MOBILE_NOISE_URLS[noiseKey];
+              if (!url) return;
+              const res  = await fetch(url);
+              const arr  = await res.arrayBuffer();
+              // Decode at a throwaway sample rate first, then we'll resample
+              // via OfflineAudioContext during rendering if needed.
+              const tmpCtx = new OfflineAudioContext(2, 1, sampleRate);
+              const buffer = await tmpCtx.decodeAudioData(arr);
+              enabledNoiseBuffers[noiseKey] = { buffer, volume: cfg.volume / 100 };
+            } catch (err) {
+              console.error(`Failed to load noise buffer for export: ${noiseKey}`, err);
+            }
+          })
+        );
+      }
+    }
+
+    setExportProgress(prev => ({ ...prev, stage: 'rendering' }));
 
     let pendingEncode = null;
 
     for (let chunkIndex = 0; chunkIndex < numChunks; chunkIndex++) {
       const isLastChunk = chunkIndex === numChunks - 1;
       const currentChunkDuration = isLastChunk ? totalDuration - (chunkIndex * chunkDuration) : chunkDuration;
-      const extraDiscard = chunkIndex === 0 ? 1.0 : 0;
+
+      // On mobile we skip the worklet render entirely — the output IS the
+      // noise loops + nature sounds mixed together.
+      // On desktop we keep the original worklet render path.
+      const extraDiscard = (!isMobile && chunkIndex === 0) ? 1.0 : 0;
       const renderDuration = currentChunkDuration + extraDiscard;
-      const renderSamples = Math.floor(sampleRate * renderDuration);
+      const renderSamples  = Math.floor(sampleRate * renderDuration);
 
       const preElapsed = Math.floor((Date.now() - startTime) / 1000);
       const preProgress = Math.floor((chunkIndex / numChunks) * 100);
@@ -1181,39 +1273,93 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
       await new Promise(resolve => setTimeout(resolve, 0));
 
       const offlineCtx = new OfflineAudioContext(2, renderSamples, sampleRate);
-      await offlineCtx.audioWorklet.addModule('/realtime-engine.worklet.js');
-      const engineNode = new AudioWorkletNode(offlineCtx, 'realtime-engine', { numberOfOutputs: 1, outputChannelCount: [2] });
-      const inGain = offlineCtx.createGain(); inGain.gain.value = 1.0;
-      const lpf = offlineCtx.createBiquadFilter(); lpf.type = 'lowpass'; lpf.frequency.value = 800; lpf.Q.value = 1;
-      const bassFilter = offlineCtx.createBiquadFilter(); bassFilter.type = 'lowshelf'; bassFilter.frequency.value = 200; bassFilter.gain.value = (processing.bass - 50) / 5;
-      const masterGain = offlineCtx.createGain(); masterGain.gain.value = 1.0;
-      engineNode.connect(inGain); inGain.connect(lpf); lpf.connect(bassFilter); bassFilter.connect(masterGain); masterGain.connect(offlineCtx.destination);
 
-      const t = offlineCtx.currentTime;
-      Object.entries(layers).forEach(([k, c]) => {
-        engineNode.parameters.get(`${k}_intensity`)?.setValueAtTime((c.intensity ?? 0) / 100, t);
-        engineNode.parameters.get(`${k}_volume`)?.setValueAtTime((c.volume ?? 100) / 100, t);
-        engineNode.parameters.get(`${k}_bass`)?.setValueAtTime((c.bass ?? 50) / 100, t);
-        engineNode.parameters.get(`${k}_texture`)?.setValueAtTime((c.texture ?? 50) / 100, t);
-      });
-      Object.entries(brainwaves).forEach(([k, c]) => {
-        engineNode.parameters.get(`${k}_enabled`)?.setValueAtTime(c.enabled ? 1 : 0, t);
-        engineNode.parameters.get(`${k}_carrier`)?.setValueAtTime(c.carrier ?? 200, t);
-        engineNode.parameters.get(`${k}_beat`)?.setValueAtTime(c.beat ?? 10, t);
-        engineNode.parameters.get(`${k}_intensity`)?.setValueAtTime((c.intensity ?? 50) / 100, t);
-      });
-      engineNode.parameters.get('stereoDecorr')?.setValueAtTime((processing.stereoDecorr ?? 0) / 100, t);
-      engineNode.parameters.get('stereoWidth')?.setValueAtTime((processing.stereoWidth ?? 100) / 50, t);
-      engineNode.parameters.get('harmonicSat')?.setValueAtTime((processing.harmonicSat ?? 0) / 100, t);
-      engineNode.parameters.get('spectralDrift')?.setValueAtTime((processing.spectralDrift ?? 0) / 100, t);
-      engineNode.parameters.get('temporalSmooth')?.setValueAtTime((processing.temporalSmooth ?? 0) / 100, t);
-      engineNode.parameters.get('layerInteract')?.setValueAtTime((processing.layerInteract ?? 0) / 100, t);
-      engineNode.parameters.get('microRandom')?.setValueAtTime((processing.microRandom ?? 0) / 100, t);
-      engineNode.parameters.get('treble')?.setValueAtTime((processing.treble ?? 55) / 100, t);
-      engineNode.parameters.get('mid')?.setValueAtTime((processing.mid ?? 55) / 100, t);
-      engineNode.parameters.get('pressure')?.setValueAtTime((processing.pressure ?? 50) / 100, t);
-      engineNode.parameters.get('master')?.setValueAtTime(1.0, t);
+      // Master gain for this chunk
+      const masterGain = offlineCtx.createGain();
+      masterGain.gain.value = 1.0;
+      masterGain.connect(offlineCtx.destination);
 
+      if (!isMobile) {
+        // ── Desktop path: AudioWorklet DSP ──────────────────────
+        await offlineCtx.audioWorklet.addModule('/realtime-engine.worklet.js');
+        const engineNode = new AudioWorkletNode(offlineCtx, 'realtime-engine', { numberOfOutputs: 1, outputChannelCount: [2] });
+        const inGain = offlineCtx.createGain(); inGain.gain.value = 1.0;
+        const lpf = offlineCtx.createBiquadFilter(); lpf.type = 'lowpass'; lpf.frequency.value = 800; lpf.Q.value = 1;
+        const bassFilter = offlineCtx.createBiquadFilter(); bassFilter.type = 'lowshelf'; bassFilter.frequency.value = 200; bassFilter.gain.value = (processing.bass - 50) / 5;
+        engineNode.connect(inGain); inGain.connect(lpf); lpf.connect(bassFilter); bassFilter.connect(masterGain);
+
+        const t = offlineCtx.currentTime;
+        Object.entries(layers).forEach(([k, c]) => {
+          engineNode.parameters.get(`${k}_intensity`)?.setValueAtTime((c.intensity ?? 0) / 100, t);
+          engineNode.parameters.get(`${k}_volume`)?.setValueAtTime((c.volume ?? 100) / 100, t);
+          engineNode.parameters.get(`${k}_bass`)?.setValueAtTime((c.bass ?? 50) / 100, t);
+          engineNode.parameters.get(`${k}_texture`)?.setValueAtTime((c.texture ?? 50) / 100, t);
+        });
+        Object.entries(brainwaves).forEach(([k, c]) => {
+          engineNode.parameters.get(`${k}_enabled`)?.setValueAtTime(c.enabled ? 1 : 0, t);
+          engineNode.parameters.get(`${k}_carrier`)?.setValueAtTime(c.carrier ?? 200, t);
+          engineNode.parameters.get(`${k}_beat`)?.setValueAtTime(c.beat ?? 10, t);
+          engineNode.parameters.get(`${k}_intensity`)?.setValueAtTime((c.intensity ?? 50) / 100, t);
+        });
+        engineNode.parameters.get('stereoDecorr')?.setValueAtTime((processing.stereoDecorr ?? 0) / 100, t);
+        engineNode.parameters.get('stereoWidth')?.setValueAtTime((processing.stereoWidth ?? 100) / 50, t);
+        engineNode.parameters.get('harmonicSat')?.setValueAtTime((processing.harmonicSat ?? 0) / 100, t);
+        engineNode.parameters.get('spectralDrift')?.setValueAtTime((processing.spectralDrift ?? 0) / 100, t);
+        engineNode.parameters.get('temporalSmooth')?.setValueAtTime((processing.temporalSmooth ?? 0) / 100, t);
+        engineNode.parameters.get('layerInteract')?.setValueAtTime((processing.layerInteract ?? 0) / 100, t);
+        engineNode.parameters.get('microRandom')?.setValueAtTime((processing.microRandom ?? 0) / 100, t);
+        engineNode.parameters.get('treble')?.setValueAtTime((processing.treble ?? 55) / 100, t);
+        engineNode.parameters.get('mid')?.setValueAtTime((processing.mid ?? 55) / 100, t);
+        engineNode.parameters.get('pressure')?.setValueAtTime((processing.pressure ?? 50) / 100, t);
+        engineNode.parameters.get('master')?.setValueAtTime(1.0, t);
+      } else {
+        // ── Mobile path: noise loops via BufferSourceNode ────────
+        // Each active noise layer is a looping BufferSource at the
+        // same gain the user set (volume / 100).
+        if (Object.keys(enabledNoiseBuffers).length > 0) {
+          const noiseBus = offlineCtx.createGain();
+          noiseBus.gain.value = 0.85; // match worklet BASE_GAIN
+          noiseBus.connect(masterGain);
+
+          const chunkStartSec = chunkIndex * chunkDuration;
+          Object.entries(enabledNoiseBuffers).forEach(([, { buffer, volume }]) => {
+            const bufDuration = buffer.duration;
+            const loopOffset  = chunkStartSec % bufDuration;
+            const src = offlineCtx.createBufferSource();
+            src.buffer    = buffer;
+            src.loop      = true;
+            src.loopStart = 0;
+            src.loopEnd   = bufDuration;
+            const g = offlineCtx.createGain();
+            g.gain.value  = volume;
+            src.connect(g);
+            g.connect(noiseBus);
+            src.start(0, loopOffset, renderDuration);
+          });
+        }
+
+        // Brainwaves on mobile: binaural oscillators
+        Object.entries(brainwaves).forEach(([, cfg]) => {
+          if (!cfg.enabled) return;
+          const oscL  = offlineCtx.createOscillator();
+          const oscR  = offlineCtx.createOscillator();
+          const panL  = offlineCtx.createStereoPanner();
+          const panR  = offlineCtx.createStereoPanner();
+          const bGain = offlineCtx.createGain();
+          panL.pan.value = -1;
+          panR.pan.value =  1;
+          oscL.frequency.value = cfg.carrier;
+          oscR.frequency.value = cfg.carrier + cfg.beat;
+          bGain.gain.value = (cfg.intensity / 100) * 0.2;
+          oscL.connect(panL); panL.connect(bGain);
+          oscR.connect(panR); panR.connect(bGain);
+          bGain.connect(masterGain);
+          oscL.start(0); oscR.start(0);
+          oscL.stop(renderDuration); oscR.stop(renderDuration);
+        });
+      }
+
+      // ── Nature sounds (both desktop and mobile) ──────────────────
       if (Object.keys(enabledNatureBuffers).length > 0) {
         const natureBus = offlineCtx.createGain();
         natureBus.gain.value = 1.0;
@@ -1242,15 +1388,15 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
       }
 
       let renderedBuffer = await offlineCtx.startRendering();
-      let leftData = renderedBuffer.getChannelData(0);
+      let leftData  = renderedBuffer.getChannelData(0);
       let rightData = renderedBuffer.getChannelData(1);
       renderedBuffer = null;
       try { if (offlineCtx.close) { await offlineCtx.close(); } } catch {}
-      engineNode.disconnect();
 
-      if (chunkIndex === 0 && extraDiscard > 0) {
+      // Discard warmup samples (desktop only, first chunk)
+      if (!isMobile && chunkIndex === 0 && extraDiscard > 0) {
         const discardSamples = Math.floor(sampleRate * extraDiscard);
-        leftData = leftData.slice(discardSamples);
+        leftData  = leftData.slice(discardSamples);
         rightData = rightData.slice(discardSamples);
       }
 
@@ -1551,8 +1697,8 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
   };
 
   // ── Responsive helpers ──────────────────────────────────────────
-  const px = isMobile ? '16px' : '32px';   // horizontal padding
-  const headerPy = isMobile ? '14px' : '24px'; // header vertical padding
+  const px = isMobile ? '16px' : '32px';
+  const headerPy = isMobile ? '14px' : '24px';
 
   const ExportDurationButtons = ({ format }) => {
     const estimate = getEstimateForDuration(exportConfig.duration, format);
@@ -1631,8 +1777,6 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
           background: 'linear-gradient(to right,rgba(15,23,42,0.5),rgba(30,41,59,0.5))',
         }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-
-            {/* LEFT */}
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: isMobile ? '2px' : '4px' }}>
                 <a href="/" style={{ textDecoration: 'none' }}>
@@ -1647,13 +1791,11 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
                 </a>
                 <Waves style={{ width: isMobile ? '22px' : '30px', height: isMobile ? '22px' : '30px', color: '#fde047', animation: 'pulse 2s ease-in-out infinite', flexShrink: 0 }} />
               </div>
-              {/* subtitle hidden on mobile to save space */}
               {!isMobile && (
                 <p style={{ fontSize: '14px', color: 'rgba(254,240,138,0.8)', margin: 0 }}>✨ Professional 3D audio with crystal-clear quality</p>
               )}
             </div>
 
-            {/* RIGHT */}
             {isPro ? (
               <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: isMobile ? '10px' : '20px' }}>
                 {!isMobile && <span style={{ fontSize: '12px', color: '#94a3b8', whiteSpace: 'nowrap' }}>{user?.email || 'markelarteche@gmail.com'}</span>}
@@ -1743,30 +1885,54 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 <div style={{ borderRadius: '8px', padding: '16px', marginBottom: '16px', background: 'linear-gradient(90deg,rgba(250,204,21,0.1),rgba(253,224,71,0.1))', border: '2px solid rgba(250,204,21,0.3)' }}>
                   <p style={{ color: '#fef08a', fontSize: '12px', margin: 0 }}>
-  🎨 <strong>Sound Colors:</strong> Each noise type has a unique frequency profile. Mix and match to create your perfect soundscape with crystal-clear 3D audio.
-  {isMobile ? (
-    <span style={{ display: 'block', marginTop: '6px' }}>🎧 Best experienced with headphones on</span>
-  ) : (
-    <span> &nbsp;·&nbsp; 🎧 Best experienced with headphones on</span>
-  )}
-</p>
+                    🎨 <strong>Sound Colors:</strong> Each noise type has a unique frequency profile. Mix and match to create your perfect soundscape with crystal-clear 3D audio.
+                    {isMobile ? (
+                      <span style={{ display: 'block', marginTop: '6px' }}>🎧 Best experienced with headphones on</span>
+                    ) : (
+                      <span> &nbsp;·&nbsp; 🎧 Best experienced with headphones on</span>
+                    )}
+                  </p>
                 </div>
                 {Object.entries(layers).map(([t, c]) => (
                   <div key={t} style={{ padding: '16px', borderRadius: '8px', transition: 'all 0.3s', background: 'rgba(30,41,59,0.5)', border: '2px solid rgba(250,204,21,0.2)', overflow: 'visible', textAlign: 'left' }}>
                     <h4 style={{ color: '#fef08a', fontWeight: 500, fontSize: '14px', textTransform: 'capitalize', margin: '0 0 8px 0' }}>{t} Noise</h4>
                     <p style={{ fontSize: '12px', color: 'rgba(254,240,138,0.6)', margin: '0 0 12px 0' }}>{getLayerDesc(t)}</p>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+
+                      {/* ── DESKTOP: intensity slider triggers auto-play when >0 ── */}
                       {!isMobile && (
                         <div style={{ paddingBottom: '4px' }}>
                           <label style={{ display: 'block', fontSize: '12px', marginBottom: '8px', color: 'rgba(254,240,138,0.7)' }}>Intensity: <span {...NT}>{c.intensity}%</span></label>
-                          <input type="range" min="0" max="100" value={c.intensity} onChange={(e) => { const v = parseInt(e.target.value); setLayers(pr => ({ ...pr, [t]: { ...pr[t], intensity: v } })); sendParam(`${t}_intensity`, v / 100); }} />
+                          <input
+                            type="range" min="0" max="100" value={c.intensity}
+                            onChange={(e) => {
+                              const v = parseInt(e.target.value);
+                              const wasZero = layers[t].intensity === 0;
+                              setLayers(pr => ({ ...pr, [t]: { ...pr[t], intensity: v } }));
+                              sendParam(`${t}_intensity`, v / 100);
+                              // Auto-play only when crossing from 0 → any positive value
+                              if (wasZero && v > 0) ensurePlaying();
+                            }}
+                          />
                         </div>
                       )}
+
+                      {/* Volume — shown always on mobile, only when intensity>0 on desktop */}
                       {(isMobile || c.intensity > 0) && (
                         <>
                           <div style={{ paddingBottom: '4px' }}>
                             <label style={{ display: 'block', fontSize: '12px', marginBottom: '8px', color: 'rgba(254,240,138,0.7)' }}>Volume: <span {...NT}>{c.volume}%</span></label>
-                            <input type="range" min="0" max="100" value={c.volume} onChange={(e) => { const v = parseInt(e.target.value); setLayers(pr => ({ ...pr, [t]: { ...pr[t], volume: v } })); sendParam(`${t}_volume`, v / 100); }} />
+                            <input
+                              type="range" min="0" max="100" value={c.volume}
+                              onChange={(e) => {
+                                const v = parseInt(e.target.value);
+                                // On mobile: volume IS the intensity — auto-play when crossing 0→+
+                                const wasZero = isMobile && layers[t].volume === 0;
+                                setLayers(pr => ({ ...pr, [t]: { ...pr[t], volume: v } }));
+                                sendParam(`${t}_volume`, v / 100);
+                                if (isMobile && wasZero && v > 0) ensurePlaying();
+                              }}
+                            />
                           </div>
                           {!isMobile && (
                             <div style={{ paddingBottom: '4px' }}>
@@ -1829,6 +1995,7 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
                         <div style={{ marginTop: '12px', paddingBottom: '4px' }}>
                           <label style={{ display: 'block', fontSize: '12px', marginBottom: '4px', color: 'rgba(254,240,138,0.7)' }}>Volume: <span {...NT}>{soundConfig.volume}%</span></label>
                           <input type="range" min="0" max="100" value={soundConfig.volume}
+                            onClick={(e) => e.stopPropagation()}
                             onChange={(e) => setNatureSounds(prev => ({ ...prev, [soundKey]: { ...prev[soundKey], volume: parseInt(e.target.value) } }))} />
                         </div>
                       )}
@@ -1843,25 +2010,33 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 <div style={{ borderRadius: '8px', padding: '16px', marginBottom: '16px', background: 'linear-gradient(90deg,rgba(250,204,21,0.1),rgba(253,224,71,0.1))', border: '2px solid rgba(250,204,21,0.3)' }}>
                   <p style={{ color: '#fef08a', fontSize: '12px', margin: 0 }}>
-  🧠 <strong>Brainwave Entrainment:</strong> Binaural beats that guide your brain into specific states. Each frequency targets different mental states for optimal results.
-  {isMobile ? (
-    <span style={{ display: 'block', marginTop: '6px' }}>🎧 Headphones enhance the binaural effect</span>
-  ) : (
-    <span> &nbsp;·&nbsp; 🎧 Headphones enhance the binaural effect</span>
-  )}
-</p>
+                    🧠 <strong>Brainwave Entrainment:</strong> Binaural beats that guide your brain into specific states.
+                    {isMobile ? (
+                      <span style={{ display: 'block', marginTop: '6px' }}>🎧 Headphones enhance the binaural effect</span>
+                    ) : (
+                      <span> &nbsp;·&nbsp; 🎧 Headphones enhance the binaural effect</span>
+                    )}
+                  </p>
                 </div>
                 {Object.entries(brainwaves).map(([t, c]) => (
                   <div
                     key={t}
                     style={{ padding: '16px', borderRadius: '8px', transition: 'all 0.3s', background: 'rgba(30,41,59,0.5)', border: '2px solid rgba(250,204,21,0.2)', overflow: 'visible', textAlign: 'left', cursor: 'pointer' }}
-                    onClick={() => setBrainwaves(pr => ({ ...pr, [t]: { ...pr[t], enabled: !pr[t].enabled } }))}
+                    onClick={() => {
+                      const willEnable = !brainwaves[t].enabled;
+                      setBrainwaves(pr => ({ ...pr, [t]: { ...pr[t], enabled: !pr[t].enabled } }));
+                      // Auto-play when enabling a brainwave
+                      if (willEnable) ensurePlaying();
+                    }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
                       <label style={{ color: '#fef08a', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', cursor: 'pointer', textTransform: 'capitalize' }}>
                         <input type="checkbox" checked={c.enabled}
                           onClick={(e) => e.stopPropagation()}
-                          onChange={(e) => setBrainwaves(pr => ({ ...pr, [t]: { ...pr[t], enabled: e.target.checked } }))} />
+                          onChange={(e) => {
+                            setBrainwaves(pr => ({ ...pr, [t]: { ...pr[t], enabled: e.target.checked } }));
+                            if (e.target.checked) ensurePlaying();
+                          }} />
                         {t} Wave
                       </label>
                     </div>
@@ -1871,20 +2046,20 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
                         <div style={{ paddingBottom: '4px' }}>
                           <label style={{ display: 'block', fontSize: '12px', marginBottom: '8px', color: 'rgba(254,240,138,0.7)' }}>Carrier Frequency: <span {...NT}>{c.carrier} Hz</span></label>
                           <input type="range" min="100" max="400" value={c.carrier}
-  onClick={(e) => e.stopPropagation()}
-  onChange={(e) => { const v = parseInt(e.target.value); setBrainwaves(pr => ({ ...pr, [t]: { ...pr[t], carrier: v } })); sendParam(`${t}_carrier`, v); }} />
+                            onClick={(e) => e.stopPropagation()}
+                            onChange={(e) => { const v = parseInt(e.target.value); setBrainwaves(pr => ({ ...pr, [t]: { ...pr[t], carrier: v } })); sendParam(`${t}_carrier`, v); }} />
                         </div>
                         <div style={{ paddingBottom: '4px' }}>
                           <label style={{ display: 'block', fontSize: '12px', marginBottom: '8px', color: 'rgba(254,240,138,0.7)' }}>Beat Frequency: <span {...NT}>{c.beat} Hz</span></label>
                           <input type="range" min="1" max="40" value={c.beat}
-  onClick={(e) => e.stopPropagation()}
-  onChange={(e) => { const v = parseInt(e.target.value); setBrainwaves(pr => ({ ...pr, [t]: { ...pr[t], beat: v } })); sendParam(`${t}_beat`, v); }} />
+                            onClick={(e) => e.stopPropagation()}
+                            onChange={(e) => { const v = parseInt(e.target.value); setBrainwaves(pr => ({ ...pr, [t]: { ...pr[t], beat: v } })); sendParam(`${t}_beat`, v); }} />
                         </div>
                         <div style={{ paddingBottom: '4px' }}>
                           <label style={{ display: 'block', fontSize: '12px', marginBottom: '8px', color: 'rgba(254,240,138,0.7)' }}>Wave Intensity: <span {...NT}>{c.intensity}%</span></label>
                           <input type="range" min="0" max="100" value={c.intensity}
-  onClick={(e) => e.stopPropagation()}
-  onChange={(e) => { const v = parseInt(e.target.value); setBrainwaves(pr => ({ ...pr, [t]: { ...pr[t], intensity: v } })); sendParam(`${t}_intensity`, v / 100); }} />
+                            onClick={(e) => e.stopPropagation()}
+                            onChange={(e) => { const v = parseInt(e.target.value); setBrainwaves(pr => ({ ...pr, [t]: { ...pr[t], intensity: v } })); sendParam(`${t}_intensity`, v / 100); }} />
                         </div>
                       </div>
                     )}
