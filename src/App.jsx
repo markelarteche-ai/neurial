@@ -402,6 +402,12 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
     green: { intensity: 0, bass: 50, volume: 50, texture: 50, brightness: 50 }
   });
 
+  // Justo después de const [layers, setLayers] = useState({...})
+const [mobileLayerActive, setMobileLayerActive] = useState({
+  white: false, pink: false, brown: true,
+  grey: false, blue: false, violet: false, black: false, green: false
+});
+
   const [brainwaves, setBrainwaves] = useState({
     alpha: { enabled:false, carrier:200, beat:10, intensity:50 },
     theta: { enabled:false, carrier:200, beat:6, intensity:50 },
@@ -1602,6 +1608,9 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
       setBrainwaves(prev => { const reset = {}; Object.keys(prev).forEach(k => reset[k] = { ...prev[k], enabled:false }); return reset; });
       killAllNatureNow();
       setNatureSounds(prev => { const reset = {}; Object.keys(prev).forEach(k => reset[k] = { ...prev[k], enabled:false }); return reset; });
+      if (isMobile) {
+        setMobileLayerActive({ white: false, pink: false, brown: false, grey: false, blue: false, violet: false, black: false, green: false });
+      }
       if (isPlaying) play();
       setTimeout(() => { isApplyingPresetRef.current = false; }, 600);
       return;
@@ -1624,6 +1633,16 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
         });
         return next;
       });
+
+      if (isMobile) {
+        setMobileLayerActive(prev => {
+          const next = {};
+          Object.keys(prev).forEach(layerKey => {
+            next[layerKey] = !!(p.layers?.[layerKey]?.intensity > 0);
+          });
+          return next;
+        });
+      }
 
       setBrainwaves(prev => {
         const merged = { ...prev };
@@ -1893,60 +1912,118 @@ const AdvancedSoundEngine = ({ isPro: isPropPro = false, user = null, onSignOut 
                     )}
                   </p>
                 </div>
-                {Object.entries(layers).map(([t, c]) => (
-                  <div key={t} style={{ padding: '16px', borderRadius: '8px', transition: 'all 0.3s', background: 'rgba(30,41,59,0.5)', border: '2px solid rgba(250,204,21,0.2)', overflow: 'visible', textAlign: 'left' }}>
-                    <h4 style={{ color: '#fef08a', fontWeight: 500, fontSize: '14px', textTransform: 'capitalize', margin: '0 0 8px 0' }}>{t} Noise</h4>
-                    <p style={{ fontSize: '12px', color: 'rgba(254,240,138,0.6)', margin: '0 0 12px 0' }}>{getLayerDesc(t)}</p>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {Object.entries(layers).map(([t, c]) => {
+  const isMobileActive = isMobile ? mobileLayerActive[t] : false;
+  return (
+    <div key={t} style={{
+      padding: '16px', borderRadius: '8px', transition: 'all 0.3s',
+      background: 'rgba(30,41,59,0.5)',
+      border: isMobile
+        ? `2px solid ${isMobileActive ? 'rgba(250,204,21,0.7)' : 'rgba(250,204,21,0.2)'}`
+        : '2px solid rgba(250,204,21,0.2)',
+      overflow: 'visible', textAlign: 'left'
+    }}>
 
-                      {/* ── DESKTOP: intensity slider triggers auto-play when >0 ── */}
-                      {!isMobile && (
-                        <div style={{ paddingBottom: '4px' }}>
-                          <label style={{ display: 'block', fontSize: '12px', marginBottom: '8px', color: 'rgba(254,240,138,0.7)' }}>Intensity: <span {...NT}>{c.intensity}%</span></label>
-                          <input
-                            type="range" min="0" max="100" value={c.intensity}
-                            onChange={(e) => {
-                              const v = parseInt(e.target.value);
-                              const wasZero = layers[t].intensity === 0;
-                              setLayers(pr => ({ ...pr, [t]: { ...pr[t], intensity: v } }));
-                              sendParam(`${t}_intensity`, v / 100);
-                              // Auto-play only when crossing from 0 → any positive value
-                              if (wasZero && v > 0) ensurePlaying();
-                            }}
-                          />
-                        </div>
-                      )}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '8px' }}>
+        <div>
+          <h4 style={{ color: '#fef08a', fontWeight: 500, fontSize: '14px', textTransform: 'capitalize', margin: '0 0 4px 0' }}>{t} Noise</h4>
+          <p style={{ fontSize: '12px', color: 'rgba(254,240,138,0.6)', margin: '0 0 8px 0' }}>{getLayerDesc(t)}</p>
+        </div>
+        {isMobile && (
+          <button
+            onClick={() => {
+              const nowActive = !mobileLayerActive[t];
+              setMobileLayerActive(prev => ({ ...prev, [t]: nowActive }));
+              if (nowActive) {
+                const vol = c.volume > 0 ? c.volume : 70;
+                setLayers(pr => ({ ...pr, [t]: { ...pr[t], volume: vol } }));
+                ensurePlaying();
+              } else {
+                setLayers(pr => ({ ...pr, [t]: { ...pr[t], volume: 0 } }));
+              }
+            }}
+            style={{
+              flexShrink: 0,
+              marginLeft: '10px',
+              padding: '5px 14px',
+              borderRadius: '20px',
+              fontSize: '12px',
+              fontWeight: 700,
+              cursor: 'pointer',
+              border: 'none',
+              transition: 'all 0.25s',
+              background: isMobileActive
+                ? 'linear-gradient(to right,#facc15,#fde047)'
+                : 'rgba(51,65,85,0.8)',
+              color: isMobileActive ? '#000' : '#94a3b8',
+              boxShadow: isMobileActive ? '0 0 8px rgba(250,204,21,0.4)' : 'none',
+            }}
+          >
+            {isMobileActive ? 'ON' : 'OFF'}
+          </button>
+        )}
+      </div>
 
-                      {/* Volume — shown always on mobile, only when intensity>0 on desktop */}
-                      {(isMobile || c.intensity > 0) && (
-                        <>
-                          <div style={{ paddingBottom: '4px' }}>
-                            <label style={{ display: 'block', fontSize: '12px', marginBottom: '8px', color: 'rgba(254,240,138,0.7)' }}>Volume: <span {...NT}>{c.volume}%</span></label>
-                            <input
-                              type="range" min="0" max="100" value={c.volume}
-                              onChange={(e) => {
-                                const v = parseInt(e.target.value);
-                                // On mobile: volume IS the intensity — auto-play when crossing 0→+
-                                const wasZero = isMobile && layers[t].volume === 0;
-                                setLayers(pr => ({ ...pr, [t]: { ...pr[t], volume: v } }));
-                                sendParam(`${t}_volume`, v / 100);
-                                if (isMobile && wasZero && v > 0) ensurePlaying();
-                              }}
-                            />
-                          </div>
-                          {!isMobile && (
-                            <div style={{ paddingBottom: '4px' }}>
-                              <label style={{ display: 'block', fontSize: '12px', marginBottom: '8px', color: 'rgba(254,240,138,0.7)' }}>Texture: <span {...NT}>{c.texture}%</span></label>
-                              <input type="range" min="0" max="100" value={c.texture} onChange={(e) => { const v = parseInt(e.target.value); setLayers(pr => ({ ...pr, [t]: { ...pr[t], texture: v } })); sendParam(`${t}_texture`, v / 100); }} />
-                            </div>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  </div>
-                ))}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        {!isMobile && (
+          <div style={{ paddingBottom: '4px' }}>
+            <label style={{ display: 'block', fontSize: '12px', marginBottom: '8px', color: 'rgba(254,240,138,0.7)' }}>
+              Intensity: <span {...NT}>{c.intensity}%</span>
+            </label>
+            <input
+              type="range" min="0" max="100" value={c.intensity}
+              onChange={(e) => {
+                const v = parseInt(e.target.value);
+                const wasZero = layers[t].intensity === 0;
+                setLayers(pr => ({ ...pr, [t]: { ...pr[t], intensity: v } }));
+                sendParam(`${t}_intensity`, v / 100);
+                if (wasZero && v > 0) ensurePlaying();
+              }}
+            />
+          </div>
+        )}
+
+        {(isMobile ? isMobileActive : c.intensity > 0) && (
+          <>
+            <div style={{ paddingBottom: '4px' }}>
+              <label style={{ display: 'block', fontSize: '12px', marginBottom: '8px', color: 'rgba(254,240,138,0.7)' }}>
+                Volume: <span {...NT}>{c.volume}%</span>
+              </label>
+              <input
+                type="range" min="0" max="100" value={c.volume}
+                onChange={(e) => {
+                  const v = parseInt(e.target.value);
+                  const wasZero = isMobile && layers[t].volume === 0;
+                  setLayers(pr => ({ ...pr, [t]: { ...pr[t], volume: v } }));
+                  sendParam(`${t}_volume`, v / 100);
+                  if (isMobile && wasZero && v > 0) ensurePlaying();
+                }}
+              />
+            </div>
+            {!isMobile && (
+              <div style={{ paddingBottom: '4px' }}>
+                <label style={{ display: 'block', fontSize: '12px', marginBottom: '8px', color: 'rgba(254,240,138,0.7)' }}>
+                  Texture: <span {...NT}>{c.texture}%</span>
+                </label>
+                <input
+                  type="range" min="0" max="100" value={c.texture}
+                  onChange={(e) => {
+                    const v = parseInt(e.target.value);
+                    setLayers(pr => ({ ...pr, [t]: { ...pr[t], texture: v } }));
+                    sendParam(`${t}_texture`, v / 100);
+                  }}
+                />
               </div>
             )}
+          </>
+        )}
+      </div>
+    </div>
+    );
+})}
+              </div>
+            )}
+
 
             {/* ===== NATURE TAB ===== */}
             {activeTab === 'nature' && (
