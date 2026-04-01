@@ -846,16 +846,11 @@ const [mobileLayerActive, setMobileLayerActive] = useState({
   // Protected by autoPlayPendingRef to prevent concurrent calls
   // when sliders are moved quickly.
   // ══════════════════════════════════════════════════════════════
-  const ensurePlaying = async () => {
-    if (isPlayingRef.current || isTransitioning || isGenerating) return;
-    if (autoPlayPendingRef.current) return;
-    autoPlayPendingRef.current = true;
-    try {
-      await play();
-    } finally {
-      autoPlayPendingRef.current = false;
-    }
-  };
+  // REEMPLAZA ensurePlaying:
+const ensurePlaying = async () => {
+  if (isPlayingRef.current || isTransitioning || isGenerating) return;
+  await play();
+};
 
   const handleNatureToggle = (soundKey, checked) => {
     if (natureToggleLock.current) return;
@@ -1931,20 +1926,36 @@ const [mobileLayerActive, setMobileLayerActive] = useState({
         </div>
         {isMobile && (
           <button
-            onClick={() => {
-              const nowActive = !mobileLayerActive[t];
-              setMobileLayerActive(prev => ({ ...prev, [t]: nowActive }));
-              if (nowActive) {
-                const vol = c.volume > 0 ? c.volume : 70;
-                setLayers(pr => ({ ...pr, [t]: { ...pr[t], volume: vol } }));
-                ensurePlaying();
-              } else {
-                setLayers(pr => ({ ...pr, [t]: { ...pr[t], volume: 0 } }));
-                if (mobileEngineRef.current) {
-                  mobileEngineRef.current.stopLayer(t);
-                }
-              }
-            }}
+            // REEMPLAZA este bloque dentro del .map de layers (el onClick del botón ON/OFF mobile):
+
+onClick={() => {
+  const nowActive = !mobileLayerActive[t];
+  setMobileLayerActive(prev => ({ ...prev, [t]: nowActive }));
+  
+  if (nowActive) {
+    const vol = c.volume > 0 ? c.volume : 70;
+    setLayers(pr => ({ ...pr, [t]: { ...pr[t], volume: vol } }));
+    
+    const engine = mobileEngineRef.current;
+    if (engine && isPlayingRef.current) {
+      // Ya está reproduciendo → solo sube el volumen de esta layer
+      engine.setVolume(t, vol);
+    } else {
+      // No está reproduciendo → arranca todo
+      // Usar play() directamente en lugar de ensurePlaying() para evitar el guard
+      play();
+    }
+  } else {
+    // OFF: bajar volumen a 0 INMEDIATAMENTE en el engine
+    setLayers(pr => ({ ...pr, [t]: { ...pr[t], volume: 0 } }));
+    const engine = mobileEngineRef.current;
+    if (engine) {
+      // Intentar ambos métodos por si acaso
+      try { engine.stopLayer(t); } catch {}
+      try { engine.setVolume(t, 0); } catch {}
+    }
+  }
+}}
             style={{
               flexShrink: 0,
               marginLeft: '10px',
