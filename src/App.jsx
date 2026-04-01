@@ -615,23 +615,27 @@ const [mobileLayerActive, setMobileLayerActive] = useState({
 }, [brainwaves, isPlaying]);
 
   useEffect(() => {
-    if (!isMobile || !isPlaying || !mobileEngineRef.current) return;
-    const engine = mobileEngineRef.current;
-    Object.entries(layers).forEach(([type, cfg]) => {
-      const volume = cfg.volume;
-      if (volume > 0) {
-        if (!engine.layers[type]) {
+  if (!isMobile || !isPlaying || !mobileEngineRef.current) return;
+  const engine = mobileEngineRef.current;
+  Object.entries(layers).forEach(([type, cfg]) => {
+    const volume = cfg.volume;
+    if (volume > 0) {
+      if (!engine.layers[type]) {
+        // Solo arrancar si mobileLayerActive lo dice
+        if (mobileLayerActive[type]) {
           engine.playLayer(type, volume);
-        } else {
-          engine.setVolume(type, volume);
         }
       } else {
-        if (engine.layers[type]) {
-          engine.stopLayer(type);
-        }
+        engine.setVolume(type, volume);
       }
-    });
-  }, [layers, isPlaying]);
+    } else {
+      // volume === 0: parar si sigue corriendo (por si acaso)
+      if (engine.layers[type]) {
+        engine.stopLayer(type, true); // immediate también aquí
+      }
+    }
+  });
+}, [layers, isPlaying]);
 
   const natureLoadingRef = useRef({});
 
@@ -1946,15 +1950,13 @@ onClick={() => {
       play();
     }
   } else {
-    // OFF: bajar volumen a 0 INMEDIATAMENTE en el engine
-    setLayers(pr => ({ ...pr, [t]: { ...pr[t], volume: 0 } }));
-    const engine = mobileEngineRef.current;
-    if (engine) {
-      // Intentar ambos métodos por si acaso
-      try { engine.stopLayer(t); } catch {}
-      try { engine.setVolume(t, 0); } catch {}
-    }
+  // Primero matar el audio de forma inmediata, ANTES del setState
+  const engine = mobileEngineRef.current;
+  if (engine) {
+    engine.stopLayer(t, true); // immediate=true: sin fade, sin setTimeout, sin race
   }
+  setLayers(pr => ({ ...pr, [t]: { ...pr[t], volume: 0 } }));
+}
 }}
             style={{
               flexShrink: 0,
@@ -1991,7 +1993,11 @@ onClick={() => {
                 const wasZero = layers[t].intensity === 0;
                 setLayers(pr => ({ ...pr, [t]: { ...pr[t], intensity: v } }));
                 sendParam(`${t}_intensity`, v / 100);
-                if (wasZero && v > 0) ensurePlaying();
+               if (wasZero && v > 0) {
+                  if (!isPlayingRef.current && !isTransitioning) {
+                    play();
+                  }
+                }
               }}
             />
           </div>
@@ -2010,7 +2016,11 @@ onClick={() => {
                   const wasZero = isMobile && layers[t].volume === 0;
                   setLayers(pr => ({ ...pr, [t]: { ...pr[t], volume: v } }));
                   sendParam(`${t}_volume`, v / 100);
-                  if (isMobile && wasZero && v > 0) ensurePlaying();
+                  if (isMobile && wasZero && v > 0) {
+                    if (!isPlayingRef.current && !isTransitioning) {
+                      play();
+                    }
+                  }
                 }}
               />
             </div>
@@ -2116,8 +2126,9 @@ onClick={() => {
                     onClick={() => {
                       const willEnable = !brainwaves[t].enabled;
                       setBrainwaves(pr => ({ ...pr, [t]: { ...pr[t], enabled: !pr[t].enabled } }));
-                      // Auto-play when enabling a brainwave
-                      if (willEnable) ensurePlaying();
+                      if (willEnable && !isPlayingRef.current && !isTransitioning) {
+                        play();
+                      }
                     }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
@@ -2126,7 +2137,9 @@ onClick={() => {
                           onClick={(e) => e.stopPropagation()}
                           onChange={(e) => {
                             setBrainwaves(pr => ({ ...pr, [t]: { ...pr[t], enabled: e.target.checked } }));
-                            if (e.target.checked) ensurePlaying();
+                            if (e.target.checked && !isPlayingRef.current && !isTransitioning) {
+                              play();
+                            }
                           }} />
                         {t} Wave
                       </label>
