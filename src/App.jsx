@@ -915,6 +915,15 @@ const ensurePlaying = async () => {
         }
         mobileEngineRef.current = engine;
 
+        if (isMobile) {
+  const mCtx = engine.ctx;
+  Object.keys(NATURE_SOUND_URLS).forEach(soundKey => {
+    if (!natureBufferCacheRef.current[soundKey] && !natureLoadingRef.current[soundKey]) {
+      loadNatureBufferRealtime(mCtx, soundKey).catch(() => {});
+    }
+  });
+}
+
         // Play layers that have volume > 0 (volume IS the intensity on mobile)
         Object.entries(layersRef.current).forEach(([type, cfg]) => {
           if (cfg.volume > 0) { engine.playLayer(type, cfg.volume); }
