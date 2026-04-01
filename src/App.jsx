@@ -619,19 +619,15 @@ const [mobileLayerActive, setMobileLayerActive] = useState({
   const engine = mobileEngineRef.current;
   Object.entries(layers).forEach(([type, cfg]) => {
     const volume = cfg.volume;
-    if (volume > 0) {
+    if (volume > 0 && mobileLayerActive[type]) {
       if (!engine.layers[type]) {
-        // Solo arrancar si mobileLayerActive lo dice
-        if (mobileLayerActive[type]) {
-          engine.playLayer(type, volume);
-        }
+        engine.playLayer(type, volume);
       } else {
         engine.setVolume(type, volume);
       }
     } else {
-      // volume === 0: parar si sigue corriendo (por si acaso)
       if (engine.layers[type]) {
-        engine.stopLayer(type, true); // immediate también aquí
+        engine.stopLayer(type, true); // immediate
       }
     }
   });
@@ -1950,12 +1946,25 @@ onClick={() => {
       play();
     }
   } else {
-  // Primero matar el audio de forma inmediata, ANTES del setState
+  // Parar esta layer inmediatamente
   const engine = mobileEngineRef.current;
   if (engine) {
-    engine.stopLayer(t, true); // immediate=true: sin fade, sin setTimeout, sin race
+    engine.stopLayer(t, true);
   }
+  
+  const newMobileLayerActive = { ...mobileLayerActive, [t]: false };
+  setMobileLayerActive(newMobileLayerActive);
   setLayers(pr => ({ ...pr, [t]: { ...pr[t], volume: 0 } }));
+
+  // Comprobar si queda algo activo
+  const algúnLayerActivo = Object.values(newMobileLayerActive).some(v => v);
+  const algúnNatureActivo = Object.values(natureSounds).some(s => s.enabled);
+  const algúnBrainwaveActivo = Object.values(brainwaves).some(b => b.enabled);
+
+  if (!algúnLayerActivo && !algúnNatureActivo && !algúnBrainwaveActivo) {
+    // No queda nada sonando → parar el engine completo
+    stopSound();
+  }
 }
 }}
             style={{
