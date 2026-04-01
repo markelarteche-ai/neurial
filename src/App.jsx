@@ -1940,6 +1940,9 @@ const [mobileLayerActive, setMobileLayerActive] = useState({
                 ensurePlaying();
               } else {
                 setLayers(pr => ({ ...pr, [t]: { ...pr[t], volume: 0 } }));
+                if (mobileEngineRef.current) {
+                  mobileEngineRef.current.stopLayer(t);
+                }
               }
             }}
             style={{
