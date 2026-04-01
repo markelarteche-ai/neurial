@@ -665,14 +665,22 @@ const [mobileLayerActive, setMobileLayerActive] = useState({
     if (!ctx || ctx.state === 'closed') return;
     if (natureAudioRefs.current[soundKey]) return;
 
-    if (ctx.state === 'suspended') {
-      ctx.resume().then(() => {
-        if (!natureAudioRefs.current[soundKey] && (isMobile ? mobileEngineRef.current?.ctx : audioContextRef.current) === ctx) {
-          startNatureSound(soundKey, natureSoundsRef.current[soundKey]?.volume ?? volume);
-        }
-      }).catch(err => console.error('ctx.resume failed:', err));
-      return;
+    // DESPUÉS (correcto):
+if (ctx.state === 'suspended') {
+  ctx.resume().then(() => {
+    // Solo reintentar si el sonido sigue habilitado y no fue iniciado ya
+    const currentState = natureSoundsRef.current[soundKey];
+    if (
+      currentState?.enabled &&
+      !natureAudioRefs.current[soundKey] &&
+      (isMobile ? mobileEngineRef.current?.ctx : audioContextRef.current) === ctx &&
+      ctx.state === 'running'
+    ) {
+      startNatureSound(soundKey, currentState.volume ?? volume);
     }
+  }).catch(() => {});
+  return;
+}
 
     const gain1      = ctx.createGain();
     const gain2      = ctx.createGain();
@@ -853,38 +861,52 @@ const ensurePlaying = async () => {
 };
 
   const handleNatureToggle = (soundKey, checked) => {
-    if (natureToggleLock.current) return;
-    natureToggleLock.current = true;
-    setTimeout(() => { natureToggleLock.current = false; }, 300);
+  if (natureToggleLock.current) return;
+  natureToggleLock.current = true;
+  setTimeout(() => { natureToggleLock.current = false; }, 300);
 
-    setNatureSounds(prev => ({
-      ...prev,
-      [soundKey]: { ...prev[soundKey], enabled: checked }
-    }));
+  setNatureSounds(prev => ({
+    ...prev,
+    [soundKey]: { ...prev[soundKey], enabled: checked }
+  }));
 
-    if (checked) {
-      if (!isPlayingRef.current) {
-        // Start playback first, then attach the nature sound once the engine is ready
-        ensurePlaying().then(() => {
-          const ctx = isMobile ? mobileEngineRef.current?.ctx : audioContextRef.current;
-          if (ctx && ctx.state !== 'closed' && !natureAudioRefs.current[soundKey]) {
-            const currentVolume = natureSoundsRef.current[soundKey]?.volume ?? 70;
-            startNatureSound(soundKey, currentVolume);
-          }
-        });
-      } else {
-        const ctx = isMobile ? mobileEngineRef.current?.ctx : audioContextRef.current;
-        if (ctx && ctx.state !== 'closed' && !natureAudioRefs.current[soundKey]) {
-          const currentVolume = natureSoundsRef.current[soundKey]?.volume ?? 70;
-          startNatureSound(soundKey, currentVolume);
+  if (checked) {
+    const tryStartNature = async () => {
+      const ctx = isMobile ? mobileEngineRef.current?.ctx : audioContextRef.current;
+      
+      if (!ctx || ctx.state === 'closed') return;
+
+      // Esperar a que el ctx esté running (máx 2s)
+      if (ctx.state === 'suspended') {
+        try { await ctx.resume(); } catch {}
+        // Si sigue suspendido, reintentar tras breve espera
+        if (ctx.state !== 'running') {
+          await new Promise(r => setTimeout(r, 200));
         }
       }
-    } else {
-      if (natureAudioRefs.current[soundKey]) {
-        stopNatureSoundImperative(soundKey, false);
+
+      if (ctx.state !== 'running') return;
+
+      if (!natureAudioRefs.current[soundKey]) {
+        const currentVolume = natureSoundsRef.current[soundKey]?.volume ?? 70;
+        startNatureSound(soundKey, currentVolume);
       }
+    };
+
+    if (!isPlayingRef.current) {
+      ensurePlaying().then(() => {
+        // Pequeño delay para que el engine móvil esté 100% inicializado
+        setTimeout(() => tryStartNature(), isMobile ? 300 : 50);
+      });
+    } else {
+      tryStartNature();
     }
-  };
+  } else {
+    if (natureAudioRefs.current[soundKey]) {
+      stopNatureSoundImperative(soundKey, false);
+    }
+  }
+};
 
   const lastPlayTimestamp = useRef(0);
   const workletLoadedRef = useRef(false);
@@ -932,10 +954,20 @@ const ensurePlaying = async () => {
         setIsPlaying(true);
         isPlayingRef.current = true;
         if (isLimited) startLimitTimer();
-        startAllEnabledNatureSounds();
-        setIsGenerating(false);
-        setIsTransitioning(false);
-        return;
+        const mCtx = engine.ctx;
+const startNatureWhenReady = () => {
+  if (mCtx.state === 'running') {
+    startAllEnabledNatureSounds();
+  } else {
+    mCtx.resume()
+      .then(() => startAllEnabledNatureSounds())
+      .catch(() => {});
+  }
+};
+startNatureWhenReady();
+setIsGenerating(false);
+setIsTransitioning(false);
+return;
       }
 
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
